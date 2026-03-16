@@ -1,0 +1,15 @@
+
+> moneytracker@1.0.0 start
+> expo start --clear --tunnel
+
+[32m✔[0m [33mConsole Ninja[0m extension is connected to [33mReact Native / Expo[0m, see [36mhttps://tinyurl.com/2vt8jxzw[0m
+env: load .env
+env: export EXPO_PUBLIC_FIREBASE_API_KEY EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN EXPO_PUBLIC_FIREBASE_PROJECT_ID EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID EXPO_PUBLIC_FIREBASE_APP_ID EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB
+Starting project at /home/brav/Dev/moneytracker
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+CommandError: failed to start tunnel
+
+session closed
+
+Check the Ngrok status page for outages: https://status.ngrok.com/
