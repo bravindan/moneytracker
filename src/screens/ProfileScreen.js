@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { getCurrentUser } from '../services/authService';
 import { getUserProfile, updateUserProfile } from '../services/firestoreService';
 
-const SettingsScreen = () => {
+const ProfileScreen = ({ navigation }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -77,7 +77,6 @@ const SettingsScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Text style={styles.title}>Profile Settings</Text>
         <Text style={styles.subtitle}>Manage your account details</Text>
 
         <View style={styles.formGroup}>
@@ -143,12 +142,6 @@ const styles = StyleSheet.create({
   scrollContainer: {
     padding: 20,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 8,
-  },
   subtitle: {
     fontSize: 14,
     color: '#6b7280',
@@ -213,4 +206,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SettingsScreen;
+export default ProfileScreen;

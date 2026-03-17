@@ -1,18 +1,15 @@
-import { ScrollView, Text, View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { ScrollView, Text, View, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { getCurrentUser, logoutUser } from '../services/authService';
 import { getMonthlySummary, getMonthlySummaries, getUserProfile } from '../services/firestoreService';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 
 
 
-const fmt = (amount) =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 2,
-  }).format(amount);
+
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7); // YYYY-MM
 
@@ -319,45 +316,62 @@ export default function DashboardScreen({ navigation }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch user profile
-  useEffect(() => {
+  const fetchProfile = useCallback(async () => {
     if (!uid) return;
-    const fetchProfile = async () => {
-      setProfileLoading(true);
-      try {
-        const data = await getUserProfile(uid);
-        setProfile(data);
-      } catch (error) {
-        console.error('Failed to fetch profile:', error);
-      } finally {
-        setProfileLoading(false);
-      }
-    };
-    fetchProfile();
+    setProfileLoading(true);
+    try {
+      const data = await getUserProfile(uid);
+      setProfile(data);
+    } catch (error) {
+      console.error('Failed to fetch profile:', error);
+    } finally {
+      setProfileLoading(false);
+    }
   }, [uid]);
+
+  const fetchMonthlyData = useCallback(async () => {
+    if (!uid) return;
+    setLoading(true);
+    try {
+      const data = await getMonthlySummary(uid, selectedMonth);
+      if (data) {
+        setMonthlyData(data);
+      } else {
+        setMonthlyData(null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch monthly summary:', error);
+      setMonthlyData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [uid, selectedMonth]);
+
+  // Fetch user profile on mount and when screen is focused
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchProfile();
+    }, [fetchProfile])
+  );
 
   // Fetch monthly summary for selected month
   useEffect(() => {
-    if (!uid) return;
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const data = await getMonthlySummary(uid, selectedMonth);
-        if (data) {
-          setMonthlyData(data);
-        } else {
-          setMonthlyData(null); // fallback to hardcoded data
-        }
-      } catch (error) {
-        console.error('Failed to fetch monthly summary:', error);
-        setMonthlyData(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [uid, selectedMonth]);
+    fetchMonthlyData();
+  }, [fetchMonthlyData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchProfile(), fetchMonthlyData()]);
+    setRefreshing(false);
+  }, [fetchProfile, fetchMonthlyData]);
+
+
 
   const financialData = monthlyData
     ? {
@@ -375,6 +389,19 @@ export default function DashboardScreen({ navigation }) {
     : null;
 
   const expenseProgress = financialData && financialData.expenses.allocated > 0 ? financialData.expenses.spent / financialData.expenses.allocated : 0;
+
+  // Currency from profile, default to KES
+  const currencyCode = profile?.currency || 'KES';
+
+  // Dynamic currency formatter
+  const fmt = useMemo(() => {
+    return (amount) =>
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencyCode,
+        minimumFractionDigits: 2,
+      }).format(amount);
+  }, [currencyCode]);
 
   // Display name: prefer username from profile, then displayName from auth, then email prefix
   const displayName =
@@ -398,7 +425,7 @@ export default function DashboardScreen({ navigation }) {
     setSelectedMonth(`${newYear}-${String(newMonth).padStart(2, '0')}`);
   };
 
-  if (loading) {
+  if (loading || profileLoading) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4f46e5" />
@@ -411,7 +438,13 @@ export default function DashboardScreen({ navigation }) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar style="auto" />
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           <View style={styles.headerContainer}>
             <View style={styles.headerRow}>
               <View>
@@ -422,7 +455,7 @@ export default function DashboardScreen({ navigation }) {
                 onPress={logoutUser}
                 style={styles.signOutButton}
               >
-                <Text style={styles.signOutText}>Sign Out</Text>
+                <Ionicons name="log-out-outline" size={20} color="#ef4444" />
               </TouchableOpacity>
             </View>
             <Text style={styles.headerSubtitle}>Monthly Financial Overview</Text>
@@ -466,7 +499,13 @@ export default function DashboardScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
 
         {/* ── Top Header ── */}
         <View style={styles.headerContainer}>
@@ -479,7 +518,7 @@ export default function DashboardScreen({ navigation }) {
               onPress={logoutUser}
               style={styles.signOutButton}
             >
-              <Text style={styles.signOutText}>Sign Out</Text>
+              <Ionicons name="log-out-outline" size={20} color="#ef4444" />
             </TouchableOpacity>
           </View>
           <Text style={styles.headerSubtitle}>Monthly Financial Overview</Text>

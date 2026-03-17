@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,48 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getCurrentUser } from '../services/authService';
-import { setMonthlySummary } from '../services/firestoreService';
+import { setMonthlySummary, getUserProfile } from '../services/firestoreService';
 
 const MonthlyRecordScreen = ({ navigation }) => {
   const [income, setIncome] = useState('');
   const [savingsInvestmentPercent, setSavingsInvestmentPercent] = useState('');
   const [expensesPercent, setExpensesPercent] = useState('');
   const [loading, setLoading] = useState(false);
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   const user = getCurrentUser();
   const uid = user?.uid;
+
+  // Fetch user profile for currency
+  useEffect(() => {
+    if (!uid) return;
+    const fetchProfile = async () => {
+      setProfileLoading(true);
+      try {
+        const data = await getUserProfile(uid);
+        setProfile(data);
+      } catch (error) {
+        console.error('Failed to fetch profile:', error);
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+    fetchProfile();
+  }, [uid]);
+
+  // Currency from profile, default to KES
+  const currencyCode = profile?.currency || 'KES';
+
+  // Dynamic currency formatter
+  const fmt = useMemo(() => {
+    return (amount) =>
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencyCode,
+        minimumFractionDigits: 2,
+      }).format(amount);
+  }, [currencyCode]);
 
   const calculateAmounts = () => {
     const incomeNum = parseFloat(income) || 0;
@@ -90,7 +122,7 @@ const MonthlyRecordScreen = ({ navigation }) => {
         <Text style={styles.subtitle}>Enter your income and allocation percentages</Text>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Monthly Income (KES)</Text>
+          <Text style={styles.label}>Monthly Income</Text>
           <TextInput
             style={styles.input}
             placeholder="e.g. 50000"
@@ -132,19 +164,19 @@ const MonthlyRecordScreen = ({ navigation }) => {
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Savings & Investments:</Text>
                   <Text style={styles.summaryValue}>
-                    KES {(amounts.savingsAmount + amounts.investmentAmount).toFixed(2)}
+                    {fmt(amounts.savingsAmount + amounts.investmentAmount)}
                   </Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Expenses:</Text>
                   <Text style={styles.summaryValue}>
-                    KES {amounts.expensesAmount.toFixed(2)}
+                    {fmt(amounts.expensesAmount)}
                   </Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Remaining Balance:</Text>
                   <Text style={[styles.summaryValue, amounts.balance >= 0 ? styles.positive : styles.negative]}>
-                    KES {amounts.balance.toFixed(2)}
+                    {fmt(amounts.balance)}
                   </Text>
                 </View>
               </>
