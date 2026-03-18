@@ -1,30 +1,31 @@
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 
-const SettingsMenuScreen = ({ navigation }) => {
-  const { theme } = useTheme();
+const ThemeScreen = ({ navigation }) => {
+  const { themeMode, setThemePreference, theme } = useTheme();
   const insets = useSafeAreaInsets();
-  
-  const menuItems = [
+
+  const themeOptions = [
     {
-      title: 'Profile',
-      subtitle: 'Manage your username and account details',
-      icon: 'person-outline',
-      screen: 'Profile',
+      key: 'light',
+      title: 'Light',
+      subtitle: 'Always use light theme',
+      icon: 'sunny-outline',
     },
     {
-      title: 'Currency',
-      subtitle: 'Select your preferred currency',
-      icon: 'cash-outline',
-      screen: 'Currency',
+      key: 'dark',
+      title: 'Dark',
+      subtitle: 'Always use dark theme',
+      icon: 'moon-outline',
     },
     {
-      title: 'Theme',
-      subtitle: 'Choose your app appearance',
-      icon: 'color-palette-outline',
-      screen: 'Theme',
+      key: 'system',
+      title: 'System',
+      subtitle: 'Follow device settings',
+      icon: 'phone-portrait-outline',
     },
   ];
 
@@ -38,38 +39,49 @@ const SettingsMenuScreen = ({ navigation }) => {
     ]}>
       {/* Header with Title */}
       <View style={styles.headerContainer}>
-        <View style={styles.placeholder} />
-        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Settings</Text>
+        <TouchableOpacity
+          style={[styles.backButton, { borderColor: theme.colors.border }]}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="chevron-back" size={20} color={theme.colors.tabBarActive} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Theme</Text>
         <View style={styles.placeholder} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Text style={[styles.subtitle, { color: theme.colors.textSecondary, textAlign: 'center' }]}>
-          Customize your app experience
+          Choose your preferred theme
         </Text>
 
         <View style={[styles.menuList, { backgroundColor: theme.colors.card }]}>
-          {menuItems.map((item, index) => (
+          {themeOptions.map((option) => (
             <TouchableOpacity
-              key={index}
+              key={option.key}
               style={[
                 styles.menuItem,
                 { borderBottomColor: theme.colors.border }
               ]}
-              onPress={() => navigation.navigate(item.screen)}
+              onPress={() => setThemePreference(option.key)}
             >
-              <View style={[styles.menuIconContainer, { backgroundColor: theme.colors.tabBarFocused }]}>
-                <Ionicons name={item.icon} size={24} color={theme.colors.tabBarActive} />
+              <View style={[styles.menuIconContainer, { backgroundColor: themeMode === option.key ? theme.colors.tabBarActive : theme.colors.border }]}>
+                <Ionicons 
+                  name={option.icon} 
+                  size={24} 
+                  color={themeMode === option.key ? '#ffffff' : theme.colors.tabBarActive} 
+                />
               </View>
               <View style={styles.menuTextContainer}>
                 <Text style={[styles.menuTitle, { color: theme.colors.text }]}>
-                  {item.title}
+                  {option.title}
                 </Text>
                 <Text style={[styles.menuSubtitle, { color: theme.colors.textSecondary }]}>
-                  {item.subtitle}
+                  {option.subtitle}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward-outline" size={20} color={theme.colors.textSecondary} />
+              {themeMode === option.key && (
+                <Ionicons name="checkmark-circle" size={20} color={theme.colors.tabBarActive} />
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -90,6 +102,14 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
   },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
@@ -100,6 +120,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 20,
+    paddingBottom: 100, // Space for tab bar
   },
   subtitle: {
     fontSize: 14,
@@ -142,4 +163,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SettingsMenuScreen;
+export default ThemeScreen;

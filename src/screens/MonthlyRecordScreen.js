@@ -8,11 +8,14 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getCurrentUser } from '../services/authService';
 import { setMonthlySummary, getUserProfile } from '../services/firestoreService';
+import { useTheme } from '../contexts/ThemeContext';
 
 const MonthlyRecordScreen = ({ navigation }) => {
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [income, setIncome] = useState('');
   const [savingsInvestmentPercent, setSavingsInvestmentPercent] = useState('');
   const [expensesPercent, setExpensesPercent] = useState('');
@@ -116,16 +119,17 @@ const MonthlyRecordScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Text style={styles.title}>Create Monthly Record</Text>
-        <Text style={styles.subtitle}>Enter your income and allocation percentages</Text>
+        <Text style={[styles.title, { color: theme.colors.text }]}>Create Monthly Record</Text>
+        <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Enter your income and allocation percentages</Text>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Monthly Income</Text>
+          <Text style={[styles.label, { color: theme.colors.text }]}>Monthly Income</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
             placeholder="e.g. 50000"
+            placeholderTextColor={theme.colors.textSecondary}
             keyboardType="numeric"
             value={income}
             onChangeText={setIncome}
@@ -133,10 +137,11 @@ const MonthlyRecordScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Savings & Investments Percentage (%)</Text>
+          <Text style={[styles.label, { color: theme.colors.text }]}>Savings & Investments Percentage (%)</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
             placeholder="e.g. 50"
+            placeholderTextColor={theme.colors.textSecondary}
             keyboardType="numeric"
             value={savingsInvestmentPercent}
             onChangeText={setSavingsInvestmentPercent}
@@ -144,37 +149,38 @@ const MonthlyRecordScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Expenses Percentage (%)</Text>
+          <Text style={[styles.label, { color: theme.colors.text }]}>Expenses Percentage (%)</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
             placeholder="e.g. 50"
+            placeholderTextColor={theme.colors.textSecondary}
             keyboardType="numeric"
             value={expensesPercent}
             onChangeText={setExpensesPercent}
           />
         </View>
 
-        <View style={styles.summaryBox}>
-          <Text style={styles.summaryTitle}>Calculated Amounts</Text>
+        <View style={[styles.summaryBox, { backgroundColor: theme.colors.card }]}>
+          <Text style={[styles.summaryTitle, { color: theme.colors.textSecondary }]}>Calculated Amounts</Text>
           {(() => {
             const amounts = calculateAmounts();
             if (!amounts) return null;
             return (
               <>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Savings & Investments:</Text>
-                  <Text style={styles.summaryValue}>
+                  <Text style={[styles.summaryLabel, { color: theme.colors.text }]}>Savings & Investments:</Text>
+                  <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
                     {fmt(amounts.savingsAmount + amounts.investmentAmount)}
                   </Text>
                 </View>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Expenses:</Text>
-                  <Text style={styles.summaryValue}>
+                  <Text style={[styles.summaryLabel, { color: theme.colors.text }]}>Expenses:</Text>
+                  <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
                     {fmt(amounts.expensesAmount)}
                   </Text>
                 </View>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Remaining Balance:</Text>
+                  <Text style={[styles.summaryLabel, { color: theme.colors.text }]}>Remaining Balance:</Text>
                   <Text style={[styles.summaryValue, amounts.balance >= 0 ? styles.positive : styles.negative]}>
                     {fmt(amounts.balance)}
                   </Text>
@@ -185,7 +191,7 @@ const MonthlyRecordScreen = ({ navigation }) => {
         </View>
 
         <TouchableOpacity
-          style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+          style={[styles.saveButton, { backgroundColor: loading ? theme.colors.textSecondary : theme.colors.tabBarActive }]}
           onPress={handleSave}
           disabled={loading}
         >
@@ -195,20 +201,19 @@ const MonthlyRecordScreen = ({ navigation }) => {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.cancelButton}
+          style={[styles.cancelButton, { borderColor: theme.colors.border }]}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
+          <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>Cancel</Text>
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
   },
   scrollContainer: {
     padding: 20,
@@ -216,12 +221,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#111827',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6b7280',
     marginBottom: 24,
   },
   formGroup: {
@@ -230,21 +233,16 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#374151',
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    color: '#111827',
   },
   summaryBox: {
-    backgroundColor: '#e0f2fe',
     borderRadius: 12,
     padding: 16,
     marginTop: 20,
@@ -253,7 +251,6 @@ const styles = StyleSheet.create({
   summaryTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#0369a1',
     marginBottom: 12,
   },
   summaryRow: {
@@ -263,12 +260,10 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 16,
-    color: '#374151',
   },
   summaryValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
   },
   positive: {
     color: '#059669',
@@ -277,14 +272,10 @@ const styles = StyleSheet.create({
     color: '#dc2626',
   },
   saveButton: {
-    backgroundColor: '#4f46e5',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 12,
-  },
-  saveButtonDisabled: {
-    backgroundColor: '#9ca3af',
   },
   saveButtonText: {
     color: '#ffffff',
@@ -297,10 +288,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#d1d5db',
   },
   cancelButtonText: {
-    color: '#6b7280',
     fontSize: 18,
     fontWeight: '600',
   },

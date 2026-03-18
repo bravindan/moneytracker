@@ -1,34 +1,38 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
   StyleSheet,
+  StatusBar,
+  Alert,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../contexts/ThemeContext';
 import { getCurrentUser } from '../services/authService';
 import { getUserProfile, updateUserProfile } from '../services/firestoreService';
-
-const currencies = [
-  { code: 'KES', name: 'Kenyan Shilling', symbol: 'KSh' },
-  { code: 'USD', name: 'US Dollar', symbol: '$' },
-  { code: 'EUR', name: 'Euro', symbol: '€' },
-  { code: 'GBP', name: 'British Pound', symbol: '£' },
-  { code: 'JPY', name: 'Japanese Yen', symbol: '¥' },
-  { code: 'CAD', name: 'Canadian Dollar', symbol: 'CA$' },
-  { code: 'AUD', name: 'Australian Dollar', symbol: 'A$' },
-  { code: 'INR', name: 'Indian Rupee', symbol: '₹' },
-];
+import CustomAlert from '../components/CustomAlert';
 
 const CurrencyScreen = ({ navigation }) => {
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [currencies] = useState([
+    { code: 'KES', name: 'Kenyan Shilling', symbol: 'KSh' },
+    { code: 'USD', name: 'US Dollar', symbol: '$' },
+    { code: 'EUR', name: 'Euro', symbol: '€' },
+    { code: 'GBP', name: 'British Pound', symbol: '£' },
+    { code: 'JPY', name: 'Japanese Yen', symbol: '¥' },
+    { code: 'CAD', name: 'Canadian Dollar', symbol: 'CA$' },
+    { code: 'AUD', name: 'Australian Dollar', symbol: 'A$' },
+  ]);
   const [selectedCurrency, setSelectedCurrency] = useState('KES');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState(null);
+  const [alert, setAlert] = useState({ visible: false, title: '', message: '', buttons: [] });
 
   const user = getCurrentUser();
   const uid = user?.uid;
@@ -78,46 +82,68 @@ const CurrencyScreen = ({ navigation }) => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4f46e5" />
-        <Text style={{ marginTop: 12, color: '#6b7280' }}>Loading...</Text>
-      </SafeAreaView>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color={theme.colors.tabBarActive} />
+        <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>Loading...</Text>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Text style={styles.subtitle}>Select your preferred currency for displaying amounts</Text>
+    <View style={[styles.container, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
+      <StatusBar style="auto" />
+      
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alert.visible}
+        title={alert.title}
+        message={alert.message}
+        buttons={alert.buttons}
+        onClose={() => setAlert({ visible: false })}
+      />
+      
+      <View style={styles.headerContainer}>
+        <TouchableOpacity
+          style={[styles.backButton, { borderColor: theme.colors.border }]}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="chevron-back" size={20} color={theme.colors.tabBarActive} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Currency</Text>
+        <View style={styles.placeholder} />
+      </View>
 
-        <View style={styles.currencyList}>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Text style={[styles.subtitle, { color: theme.colors.textSecondary, textAlign: 'center' }]}>Select your preferred currency for displaying amounts</Text>
+
+        <View style={[styles.currencyList, { backgroundColor: theme.colors.card }]}>
           {currencies.map((currency) => (
             <TouchableOpacity
               key={currency.code}
               style={[
                 styles.currencyItem,
-                selectedCurrency === currency.code && styles.currencyItemSelected,
+                { borderBottomColor: theme.colors.border }
               ]}
               onPress={() => handleSelect(currency.code)}
             >
               <View style={styles.currencyLeft}>
-                <View style={styles.currencyIcon}>
-                  <Text style={styles.currencySymbol}>{currency.symbol}</Text>
+                <View style={[styles.currencyIcon, { backgroundColor: theme.isDark ? '#2C2C2E' : theme.colors.tabBarFocused }]}>
+                  <Text style={[styles.currencySymbol, { color: theme.isDark ? '#ffffff' : theme.colors.tabBarActive }]}>{currency.symbol}</Text>
                 </View>
                 <View style={styles.currencyText}>
-                  <Text style={styles.currencyName}>{currency.name}</Text>
-                  <Text style={styles.currencyCode}>{currency.code}</Text>
+                  <Text style={[styles.currencyName, { color: theme.colors.text }]}>{currency.name}</Text>
+                  <Text style={[styles.currencyCode, { color: theme.colors.textSecondary }]}>{currency.code}</Text>
                 </View>
               </View>
               {selectedCurrency === currency.code && (
-                <Ionicons name="checkmark-circle" size={24} color="#4f46e5" />
+                <Ionicons name="checkmark-circle" size={24} color={theme.isDark ? '#007AFF' : '#007AFF'} />
               )}
             </TouchableOpacity>
           ))}
         </View>
 
         <TouchableOpacity
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+          style={[styles.saveButton, { backgroundColor: saving ? theme.colors.textSecondary : theme.colors.tabBarActive }]}
           onPress={handleSave}
           disabled={saving}
         >
@@ -128,7 +154,7 @@ const CurrencyScreen = ({ navigation }) => {
           )}
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -137,22 +163,45 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
   },
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+  },
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+  },
+  placeholder: {
+    width: 40,
+    height: 40,
   },
   scrollContainer: {
     padding: 20,
+    paddingBottom: 100, // Space for tab bar
   },
   subtitle: {
     fontSize: 14,
-    color: '#6b7280',
     marginBottom: 24,
   },
   currencyList: {
-    backgroundColor: '#ffffff',
     borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -167,12 +216,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24, // Increased padding for check mark space
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  currencyItemSelected: {
-    backgroundColor: '#f5f3ff',
+    minHeight: 72, // Ensure enough space for checkbox
   },
   currencyLeft: {
     flexDirection: 'row',
@@ -182,7 +228,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#e0e7ff',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -190,7 +235,6 @@ const styles = StyleSheet.create({
   currencySymbol: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#4f46e5',
   },
   currencyText: {
     flex: 1,
@@ -198,21 +242,15 @@ const styles = StyleSheet.create({
   currencyName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
     marginBottom: 2,
   },
   currencyCode: {
     fontSize: 12,
-    color: '#9ca3af',
   },
   saveButton: {
-    backgroundColor: '#4f46e5',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
-  },
-  saveButtonDisabled: {
-    backgroundColor: '#9ca3af',
   },
   saveButtonText: {
     color: '#ffffff',

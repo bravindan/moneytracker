@@ -10,13 +10,14 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { loginUser, registerUser } from '../services/authService';
 import { createUserProfile, getUserProfile } from '../services/firestoreService';
+import { useTheme } from '../contexts/ThemeContext';
 
 // Required to complete the Google auth redirect back into the app
 WebBrowser.maybeCompleteAuthSession();
@@ -39,7 +40,6 @@ const firebaseError = (code) =>
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb', // bg-gray-50
   },
   keyboardAvoiding: {
     flex: 1,
@@ -56,7 +56,6 @@ const styles = StyleSheet.create({
   logoContainer: {
     width: 96,
     height: 96,
-    backgroundColor: '#6366f1', // indigo-500
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
@@ -73,17 +72,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 30,
     fontWeight: 'bold',
-    color: '#111827', // gray-900
     letterSpacing: -0.5,
   },
   subtitle: {
-    color: '#6b7280', // gray-500
     fontSize: 14,
     marginTop: 4,
   },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#e5e7eb', // gray-200
     borderRadius: 16,
     padding: 4,
     marginBottom: 28,
@@ -94,7 +90,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   tabButtonActive: {
-    backgroundColor: '#4f46e5', // indigo-600
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -105,7 +100,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
     fontSize: 14,
-    color: '#4b5563', // gray-600
   },
   tabTextActive: {
     color: '#ffffff',
@@ -113,18 +107,14 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151', // gray-700
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#d1d5db', // gray-300
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 16,
     fontSize: 16,
-    color: '#111827', // gray-900
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -134,9 +124,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#d1d5db',
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -149,7 +137,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: '#111827',
   },
   iconButton: {
     paddingHorizontal: 12,
@@ -157,20 +144,16 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   iconButtonText: {
-    color: '#4f46e5',
     fontWeight: '600',
     fontSize: 14,
   },
   helperText: {
-    color: '#9ca3af', // gray-400
     fontSize: 12,
     marginTop: 4,
     marginLeft: 4,
   },
   errorContainer: {
-    backgroundColor: '#fef2f2', // red-50
     borderWidth: 1,
-    borderColor: '#fee2e2', // red-100
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -182,7 +165,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   errorText: {
-    color: '#dc2626', // red-600
     fontSize: 14,
   },
   submitButton: {
@@ -190,7 +172,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     marginBottom: 16,
-    backgroundColor: '#4f46e5', // indigo-600
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -198,7 +179,6 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   submitButtonDisabled: {
-    backgroundColor: '#818cf8', // indigo-400
   },
   submitText: {
     color: '#ffffff',
@@ -213,11 +193,9 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#d1d5db', // gray-300
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#6b7280', // gray-500
     fontSize: 12,
     fontWeight: '500',
     letterSpacing: 1,
@@ -227,10 +205,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#d1d5db', // gray-300
     borderRadius: 16,
     paddingVertical: 16,
-    backgroundColor: '#ffffff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -242,25 +218,23 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
   },
   googleIconText: {
-    color: '#4285F4',
     fontWeight: '800',
     fontSize: 15,
   },
   googleButtonText: {
-    color: '#1f2937', // gray-800
     fontWeight: '600',
     fontSize: 14,
   },
 });
 
 export default function LoginScreen() {
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [phone, setPhone] = useState('');
   const [username, setUsername] = useState('');
@@ -349,7 +323,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoiding}
@@ -361,15 +335,15 @@ export default function LoginScreen() {
         >
           {/* ── Brand ── */}
           <View style={styles.brandContainer}>
-            <View style={styles.logoContainer}>
+            <View style={[styles.logoContainer, { backgroundColor: theme.colors.tabBarActive }]}>
               <Text style={styles.logoText}>💰</Text>
             </View>
-            <Text style={styles.title}>MoneyTracker</Text>
-            <Text style={styles.subtitle}>Take control of your finances</Text>
+            <Text style={[styles.title, { color: theme.colors.text }]}>MoneyTracker</Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Take control of your finances</Text>
           </View>
 
           {/* ── Tab Switcher ── */}
-          <View style={styles.tabContainer}>
+          <View style={[styles.tabContainer, { backgroundColor: theme.colors.border }]}>
             {[
               { key: 'login', label: 'Sign In' },
               { key: 'register', label: 'Register' },
@@ -379,12 +353,13 @@ export default function LoginScreen() {
                 onPress={() => { setMode(key); setError(''); }}
                 style={[
                   styles.tabButton,
-                  mode === key && styles.tabButtonActive,
+                  mode === key && [styles.tabButtonActive, { backgroundColor: theme.colors.tabBarActive }],
                 ]}
               >
                 <Text
                   style={[
                     styles.tabText,
+                    { color: theme.colors.textSecondary },
                     mode === key && styles.tabTextActive,
                   ]}
                 >
@@ -396,17 +371,17 @@ export default function LoginScreen() {
 
           {/* ── Phone Number ── */}
           <View style={{ marginBottom: 16 }}>
-            <Text style={styles.inputLabel}>Phone Number</Text>
+            <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Phone Number</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
               placeholder="0712 345 678"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={theme.colors.textSecondary}
               keyboardType="phone-pad"
               maxLength={10}
               value={phone}
               onChangeText={(t) => { setPhone(t.replace(/\D/g, '')); setError(''); }}
             />
-            <Text style={styles.helperText}>
+            <Text style={[styles.helperText, { color: theme.colors.textSecondary }]}>
               10-digit mobile number (no country code)
             </Text>
           </View>
@@ -414,17 +389,17 @@ export default function LoginScreen() {
           {/* ── Username (only for registration) ── */}
           {mode === 'register' && (
             <View style={{ marginBottom: 16 }}>
-              <Text style={styles.inputLabel}>Username</Text>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Username</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
                 placeholder="Choose a username"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={theme.colors.textSecondary}
                 value={username}
                 onChangeText={(t) => { setUsername(t); setError(''); }}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-              <Text style={styles.helperText}>
+              <Text style={[styles.helperText, { color: theme.colors.textSecondary }]}>
                 This will be used to greet you
               </Text>
             </View>
@@ -432,12 +407,12 @@ export default function LoginScreen() {
 
           {/* ── Password ── */}
           <View style={{ marginBottom: 20 }}>
-            <Text style={styles.inputLabel}>Password</Text>
-            <View style={styles.inputContainer}>
+            <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Password</Text>
+            <View style={[styles.inputContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <TextInput
-                style={styles.inputWithIcon}
+                style={[styles.inputWithIcon, { color: theme.colors.text }]}
                 placeholder="Enter your password"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={theme.colors.textSecondary}
                 secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={(t) => { setPassword(t); setError(''); }}
@@ -446,15 +421,15 @@ export default function LoginScreen() {
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.iconButton}
               >
-                <Text style={styles.iconButtonText}>{showPassword ? 'Hide' : 'Show'}</Text>
+                <Text style={[styles.iconButtonText, { color: theme.colors.tabBarActive }]}>{showPassword ? 'Hide' : 'Show'}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {/* ── Error ── */}
           {error ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
+            <View style={[styles.errorContainer, { backgroundColor: theme.isDark ? '#450a0a' : '#fef2f2', borderColor: theme.isDark ? '#7f1d1d' : '#fee2e2' }]}>
+              <Text style={[styles.errorText, { color: theme.isDark ? '#fca5a5' : '#dc2626' }]}>{error}</Text>
             </View>
           ) : null}
 
@@ -464,7 +439,7 @@ export default function LoginScreen() {
             disabled={loading}
             style={[
               styles.submitButton,
-              loading && styles.submitButtonDisabled,
+              { backgroundColor: loading ? theme.colors.textSecondary : theme.colors.tabBarActive },
             ]}
           >
             {loading ? (
@@ -478,24 +453,24 @@ export default function LoginScreen() {
 
           {/* ── Divider ── */}
           <View style={styles.dividerContainer}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
+            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+            <Text style={[styles.dividerText, { color: theme.colors.textSecondary }]}>OR</Text>
+            <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
           </View>
 
           {/* ── Google Sign-In ── */}
           <TouchableOpacity
             onPress={() => promptAsync()}
             disabled={!request || loading}
-            style={styles.googleButton}
+            style={[styles.googleButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
           >
-            <View style={styles.googleIconContainer}>
+            <View style={[styles.googleIconContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <Text style={styles.googleIconText}>G</Text>
             </View>
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
+            <Text style={[styles.googleButtonText, { color: theme.colors.text }]}>Continue with Google</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
