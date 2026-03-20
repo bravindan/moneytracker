@@ -91,7 +91,10 @@ const CurrencyScreen = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
-      <StatusBar style="auto" />
+      <StatusBar 
+        style="auto" 
+        backgroundColor={theme.colors.background}
+      />
       
       {/* Custom Alert */}
       <CustomAlert
@@ -157,6 +160,7 @@ const CurrencyScreen = ({ navigation }) => {
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   loadingContainer: {

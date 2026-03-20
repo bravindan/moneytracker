@@ -38,6 +38,14 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     borderBottomWidth: 1,
   },
+  stickyHeader: {
+    position: 'sticky',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    backgroundColor: 'transparent',
+  },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -346,6 +354,7 @@ export default function DashboardScreen({ navigation }) {
   const [showIncomeAmount, setShowIncomeAmount] = useState(false);
   const [showBalanceAmount, setShowBalanceAmount] = useState(false);
   const [showSavingsAmount, setShowSavingsAmount] = useState(false);
+  const [showExpenseAmount, setShowExpenseAmount] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     if (!uid) return;
@@ -528,26 +537,20 @@ export default function DashboardScreen({ navigation }) {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
       <StatusBar style="auto" />
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-
-        {/* ── Top Header ── */}
-        <View style={[styles.headerContainer, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+      
+      {/* Sticky Header with Month Navigation */}
+      <View style={[styles.stickyHeader, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.headerContainer}>
           <View style={styles.headerRow}>
-            <View>
+            <View style={styles.userInfo}>
               <Text style={[styles.headerWelcome, { color: theme.colors.textSecondary }]}>Welcome back 👋</Text>
               <Text style={[styles.headerName, { color: theme.colors.text }]}>{displayName}</Text>
             </View>
             <TouchableOpacity
-              onPress={logoutUser}
               style={[styles.signOutButton, { borderColor: theme.colors.border }]}
+              onPress={logoutUser}
             >
-              <Ionicons name="log-out-outline" size={20} color="#ef4444" />
+              <Text style={[styles.signOutButtonText, { color: theme.colors.text }]}>Sign Out</Text>
             </TouchableOpacity>
           </View>
           <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Monthly Financial Overview</Text>
@@ -567,6 +570,17 @@ export default function DashboardScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
+      </View>
+
+      {/* Scrollable Content */}
+      <ScrollView 
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        contentContainerStyle={styles.scrollContent}
+      >
 
         <View style={styles.contentContainer}>
 
@@ -626,6 +640,12 @@ export default function DashboardScreen({ navigation }) {
               <View style={styles.cardActions}>
                 <TouchableOpacity
                   style={[styles.actionButton, { borderColor: theme.colors.border }]}
+                  onPress={() => setShowExpenseAmount(!showExpenseAmount)}
+                >
+                  <Ionicons name={showExpenseAmount ? 'eye-off-outline' : 'eye-outline'} size={16} color={theme.colors.tabBarActive} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, { borderColor: theme.colors.border }]}
                   onPress={() => navigation.navigate('AddExpense')}
                 >
                   <Ionicons name="add-outline" size={16} color={theme.colors.tabBarActive} />
@@ -643,20 +663,26 @@ export default function DashboardScreen({ navigation }) {
               <View style={styles.summaryRow}>
                 <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Allocated:</Text>
                 <View style={styles.amountWithPercentage}>
-                  <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{fmt(financialData.expenses.allocated)}</Text>
-                  <Text style={[styles.summaryPercentage, { color: theme.colors.textSecondary }]}>
-                    ({financialData.income > 0 ? Math.round((financialData.expenses.allocated / financialData.income) * 100) : 0}% of income)
+                  <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
+                    {showExpenseAmount ? fmt(financialData.expenses.allocated) : '•••••'}
                   </Text>
+                  {showExpenseAmount && (
+                    <Text style={[styles.summaryPercentage, { color: theme.colors.textSecondary }]}>
+                      ({financialData.income > 0 ? Math.round((financialData.expenses.allocated / financialData.income) * 100) : 0}% of income)
+                    </Text>
+                  )}
                 </View>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Spent:</Text>
-                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{fmt(financialData.expenses.spent)}</Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
+                  {showExpenseAmount ? fmt(financialData.expenses.spent) : '•••••'}
+                </Text>
               </View>
               <View style={[styles.summaryRow, styles.balanceRow]}>
                 <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Remaining:</Text>
                 <Text style={[styles.summaryValue, (financialData.expenses.allocated - financialData.expenses.spent) >= 0 ? styles.positive : styles.negative]}>
-                  {fmt(financialData.expenses.allocated - financialData.expenses.spent)}
+                  {showExpenseAmount ? fmt(financialData.expenses.allocated - financialData.expenses.spent) : '•••••'}
                 </Text>
               </View>
             </View>

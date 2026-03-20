@@ -370,7 +370,11 @@ const AddInvestmentScreen = ({ navigation }) => {
                 </Text>
               </View>
               
-              {investments.map((investment) => renderInvestment({ item: investment }))}
+              {investments.map((investment) => (
+                <View key={investment.id}>
+                  {renderInvestment({ item: investment })}
+                </View>
+              ))}
               
               <TouchableOpacity
                 style={[styles.clearButton, { backgroundColor: '#ef4444' }]}
