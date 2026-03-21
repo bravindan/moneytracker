@@ -59,7 +59,7 @@ const SettingsMenuScreen = ({ navigation }) => {
               onPress={() => navigation.navigate(item.screen)}
             >
               <View style={[styles.menuIconContainer, { backgroundColor: theme.colors.tabBarFocused }]}>
-                <Ionicons name={item.icon} size={24} color={theme.colors.tabBarActive} />
+                <Ionicons name={item.icon} size={24} color={theme.isDark ? '#ffffff' : theme.colors.tabBarActive} />
               </View>
               <View style={styles.menuTextContainer}>
                 <Text style={[styles.menuTitle, { color: theme.colors.text }]}>
@@ -100,6 +100,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 20,
+    paddingBottom: 100,
   },
   subtitle: {
     fontSize: 14,

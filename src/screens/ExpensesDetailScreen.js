@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,16 @@ import {
   DatePickerAndroid,
   Platform,
   Alert,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { getCurrentUser } from '../services/authService';
 import { getExpenses, getMonthlySummary, addSpending, getSpendingByCategory, getSpending } from '../services/firestoreService';
+import { useFocusEffect } from '@react-navigation/native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 const ExpensesDetailScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -40,6 +44,7 @@ const ExpensesDetailScreen = ({ navigation }) => {
   const [spendingDate, setSpendingDate] = useState(new Date());
   const [transactionCosts, setTransactionCosts] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pickerMonthDate, setPickerMonthDate] = useState(new Date());
 
   // Load expenses data from database
   useEffect(() => {
@@ -79,6 +84,22 @@ const ExpensesDetailScreen = ({ navigation }) => {
     loadExpensesData();
   }, [user.uid, selectedMonth]);
 
+  const fetchFreshSpending = useCallback(async () => {
+    try {
+      if (!user?.uid) return;
+      const spendingData = await getSpending(user.uid);
+      setAllSpending(spendingData);
+    } catch (error) {
+      console.error('Failed to update spending data on focus:', error);
+    }
+  }, [user?.uid]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchFreshSpending();
+    }, [fetchFreshSpending])
+  );
+
   const totalAllocated = monthlyData?.expensesAmount || 0;
   const totalSpent = allSpending.reduce((sum, spending) => sum + (spending.totalSpending || spending.amount || 0), 0);
   const totalRemaining = totalAllocated - totalSpent;
@@ -108,7 +129,118 @@ const ExpensesDetailScreen = ({ navigation }) => {
 
   // Show date picker
   const showDatePickerModal = () => {
+    setPickerMonthDate(new Date(spendingDate.getTime()));
     setShowDatePicker(true);
+  };
+
+  const changePickerMonth = (direction) => {
+    const newDate = new Date(pickerMonthDate.getTime());
+    newDate.setMonth(newDate.getMonth() + direction);
+    setPickerMonthDate(newDate);
+  };
+
+  // PDF Generator block mapping complete expenditures
+  const generatePDF = async () => {
+    try {
+      const todayDate = new Date().toLocaleDateString();
+      const totalTxnCosts = allSpending.reduce((sum, s) => sum + (s.transactionCosts || 0), 0);
+      let tableHTML = '';
+      
+      expenses.forEach(expense => {
+        const categorySpendings = allSpending.filter(s => s.category === expense.category);
+        const catSpent = categorySpendings.reduce((sum, s) => sum + (s.totalSpending || s.amount || 0), 0);
+        
+        tableHTML += `
+          <h3 style="margin-top: 20px; color: #1e3a8a;">${expense.category} (Allocated: KES ${expense.amount.toFixed(2)} | Spent: KES ${catSpent.toFixed(2)})</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <tr>
+              <th style="border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f3f4f6;">Date</th>
+              <th style="border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f3f4f6;">Item</th>
+              <th style="border: 1px solid #ddd; padding: 8px; text-align: right; background-color: #f3f4f6;">Amount (KES)</th>
+            </tr>
+        `;
+        
+        if (categorySpendings.length === 0) {
+          tableHTML += `<tr><td colspan="3" style="border: 1px solid #ddd; padding: 8px; text-align: center; color: #6b7280;">No spendings recorded</td></tr>`;
+        } else {
+          categorySpendings.forEach(s => {
+            const rowDate = new Date(s.date?.toDate ? s.date.toDate() : s.date).toLocaleDateString();
+            tableHTML += `
+              <tr>
+                <td style="border: 1px solid #ddd; padding: 8px;">${rowDate}</td>
+                <td style="border: 1px solid #ddd; padding: 8px;">${s.itemName || s.description || 'N/A'}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${(s.totalSpending || s.amount || 0).toFixed(2)}</td>
+              </tr>
+            `;
+          });
+        }
+        tableHTML += `</table>`;
+      });
+
+      const htmlContent = `
+        <html>
+          <head>
+            <style>
+              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; color: #1f2937; }
+              h1 { color: #111827; text-align: center; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
+              p { margin: 5px 0; }
+              .summary-box { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+            </style>
+          </head>
+          <body>
+            <h1>Expense Expenditures Report</h1>
+            <div class="summary-box">
+              <p><strong>Generated on:</strong> ${todayDate}</p>
+              <p><strong>Total Allocated:</strong> KES ${totalAllocated.toFixed(2)}</p>
+              <p><strong>Total Spent:</strong> KES ${totalSpent.toFixed(2)}</p>
+              <p><strong>Total Transaction Costs:</strong> KES ${totalTxnCosts.toFixed(2)}</p>
+              <p><strong>Remaining:</strong> KES ${totalRemaining.toFixed(2)}</p>
+            </div>
+            <h2>Breakdown by Category</h2>
+            ${tableHTML}
+          </body>
+        </html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri);
+      } else {
+        Alert.alert('PDF Generated', `File saved to: ${uri}`);
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to generate PDF');
+    }
+  };
+
+  const renderCalendar = () => {
+    const year = pickerMonthDate.getFullYear();
+    const month = pickerMonthDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay();
+    
+    const days = [];
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<View key={`empty-${i}`} style={{ width: '14.28%', height: 36, marginBottom: 4 }} />);
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      const date = new Date(year, month, i);
+      const isSelected = date.toDateString() === spendingDate.toDateString();
+      const isToday = date.toDateString() === new Date().toDateString();
+      days.push(
+        <TouchableOpacity 
+          key={i} 
+          style={[{ width: '14.28%', height: 36, justifyContent: 'center', alignItems: 'center', marginBottom: 4, borderRadius: 18 }, isSelected && { backgroundColor: theme.colors.tabBarActive }]}
+          onPress={() => handleDateSelect(date)}
+        >
+          <Text style={[{ fontSize: 14, color: isSelected ? '#fff' : (isToday ? theme.colors.tabBarActive : theme.colors.text) }, isToday && { fontWeight: 'bold' }]}>
+            {i}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+    return days;
   };
 
   // Handle save spending
@@ -133,6 +265,16 @@ const ExpensesDetailScreen = ({ navigation }) => {
         totalSpending: totalSpending
       });
       
+      setAllSpending(prev => [...prev, {
+        category: selectedCategory,
+        amount: amount,
+        description: spendingDescription,
+        itemName: spendingItemName,
+        date: spendingDate,
+        transactionCosts: transactionCost,
+        totalSpending: totalSpending
+      }]);
+      
       Alert.alert('Success', 'Spending added successfully!');
       setShowSpendingModal(false);
       setSpendingAmount('');
@@ -147,7 +289,7 @@ const ExpensesDetailScreen = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
-      <StatusBar style="auto" />
+      <StatusBar style={theme.isDark ? 'light' : 'dark'} />
       
       {/* Header */}
       <View style={styles.headerContainer}>
@@ -158,7 +300,9 @@ const ExpensesDetailScreen = ({ navigation }) => {
           <Ionicons name="chevron-back" size={20} color={theme.colors.tabBarActive} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Expense Details</Text>
-        <View style={styles.placeholder} />
+        <TouchableOpacity style={styles.placeholder} onPress={generatePDF} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="print-outline" size={24} color={theme.colors.tabBarActive} style={{ textAlign: 'right' }} />
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -259,8 +403,11 @@ const ExpensesDetailScreen = ({ navigation }) => {
         transparent={true}
         onRequestClose={() => setShowSpendingModal(false)}
       >
-        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+        >
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card, maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
                 Add Spending - {selectedCategory}
@@ -273,7 +420,26 @@ const ExpensesDetailScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
             
-            <View style={styles.modalBody}>
+            <ScrollView 
+              style={styles.modalBody}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>Item Name:</Text>
+                <TextInput
+                  style={[styles.input, { 
+                    backgroundColor: theme.colors.background, 
+                    borderColor: theme.colors.border, 
+                    color: theme.colors.text 
+                  }]}
+                  placeholder="e.g., Coffee, Groceries, etc."
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={spendingItemName}
+                  onChangeText={setSpendingItemName}
+                />
+              </View>
+
               <View style={styles.inputGroup}>
                 <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>Amount:</Text>
                 <TextInput
@@ -287,6 +453,22 @@ const ExpensesDetailScreen = ({ navigation }) => {
                   keyboardType="numeric"
                   value={spendingAmount}
                   onChangeText={setSpendingAmount}
+                />
+              </View>
+              
+              <View style={styles.inputGroup}>
+                <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>Transaction Cost (Optional):</Text>
+                <TextInput
+                  style={[styles.input, { 
+                    backgroundColor: theme.colors.background, 
+                    borderColor: theme.colors.border, 
+                    color: theme.colors.text 
+                  }]}
+                  placeholder="0.00"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={transactionCosts}
+                  onChangeText={setTransactionCosts}
+                  keyboardType="numeric"
                 />
               </View>
               
@@ -308,37 +490,6 @@ const ExpensesDetailScreen = ({ navigation }) => {
               </View>
               
               <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>Item Name:</Text>
-                <TextInput
-                  style={[styles.input, { 
-                    backgroundColor: theme.colors.background, 
-                    borderColor: theme.colors.border, 
-                    color: theme.colors.text 
-                  }]}
-                  placeholder="e.g., Coffee, Groceries, etc."
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={spendingItemName}
-                  onChangeText={setSpendingItemName}
-                />
-              </View>
-              
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>Transaction Costs (Optional):</Text>
-                <TextInput
-                  style={[styles.input, { 
-                    backgroundColor: theme.colors.background, 
-                    borderColor: theme.colors.border, 
-                    color: theme.colors.text 
-                  }]}
-                  placeholder="e.g., delivery fee, service charge, etc."
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={transactionCosts}
-                  onChangeText={setTransactionCosts}
-                  keyboardType="numeric"
-                />
-              </View>
-              
-              <View style={styles.inputGroup}>
                 <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>Date:</Text>
                 <TouchableOpacity
                   style={[styles.dateInput, { 
@@ -348,11 +499,11 @@ const ExpensesDetailScreen = ({ navigation }) => {
                   }]}
                   onPress={showDatePickerModal}
                 >
-                  <Text style={styles.dateText}>{spendingDate.toLocaleDateString()}</Text>
+                  <Text style={[styles.dateText, { color: theme.colors.text }]}>{spendingDate.toLocaleDateString()}</Text>
                   <Ionicons name="calendar-outline" size={16} color={theme.colors.textSecondary} style={{ marginLeft: 8 }} />
                 </TouchableOpacity>
               </View>
-            </View>
+            </ScrollView>
             
             <View style={styles.modalFooter}>
               <TouchableOpacity
@@ -369,7 +520,7 @@ const ExpensesDetailScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       
       {/* Date Picker Modal */}
@@ -394,51 +545,31 @@ const ExpensesDetailScreen = ({ navigation }) => {
             </View>
             
             <View style={styles.datePickerContainer}>
-              <Text style={[styles.datePickerLabel, { color: theme.colors.textSecondary }]}>
-                Current Date: {spendingDate.toLocaleDateString()}
-              </Text>
-              
-              <View style={styles.dateOptions}>
-                <TouchableOpacity
-                  style={[styles.dateOptionButton, { backgroundColor: theme.colors.tabBarActive }]}
-                  onPress={() => handleDateSelect(new Date())}
-                >
-                  <Text style={styles.dateOptionText}>Today</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <TouchableOpacity onPress={() => changePickerMonth(-1)} style={{ padding: 8 }}>
+                  <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
                 </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.dateOptionButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-                  onPress={() => {
-                    const yesterday = new Date();
-                    yesterday.setDate(yesterday.getDate() - 1);
-                    handleDateSelect(yesterday);
-                  }}
-                >
-                  <Text style={[styles.dateOptionText, { color: theme.colors.text }]}>Yesterday</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.dateOptionButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-                  onPress={() => {
-                    const lastWeek = new Date();
-                    lastWeek.setDate(lastWeek.getDate() - 7);
-                    handleDateSelect(lastWeek);
-                  }}
-                >
-                  <Text style={[styles.dateOptionText, { color: theme.colors.text }]}>Last Week</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.dateOptionButton, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-                  onPress={() => {
-                    const lastMonth = new Date();
-                    lastMonth.setMonth(lastMonth.getMonth() - 1);
-                    handleDateSelect(lastMonth);
-                  }}
-                >
-                  <Text style={[styles.dateOptionText, { color: theme.colors.text }]}>Last Month</Text>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.text }}>
+                  {pickerMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                </Text>
+                <TouchableOpacity onPress={() => changePickerMonth(1)} style={{ padding: 8 }}>
+                  <Ionicons name="chevron-forward" size={24} color={theme.colors.text} />
                 </TouchableOpacity>
               </View>
+              
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                {['Su','Mo','Tu','We','Th','Fr','Sa'].map((d, i) => (
+                  <Text key={i} style={{ width: '14.28%', textAlign: 'center', marginBottom: 8, color: theme.colors.textSecondary, fontWeight: 'bold', fontSize: 12 }}>{d}</Text>
+                ))}
+                {renderCalendar()}
+              </View>
+              
+              <TouchableOpacity
+                style={{ marginTop: 12, paddingVertical: 12, alignItems: 'center', backgroundColor: theme.colors.background, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border }}
+                onPress={() => handleDateSelect(new Date())}
+              >
+                <Text style={{ color: theme.colors.text, fontWeight: '500' }}>Select Today</Text>
+              </TouchableOpacity>
             </View>
             
             <View style={styles.modalFooter}>

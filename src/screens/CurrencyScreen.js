@@ -139,7 +139,9 @@ const CurrencyScreen = ({ navigation }) => {
                 </View>
               </View>
               {selectedCurrency === currency.code && (
-                <Ionicons name="checkmark-circle" size={24} color={theme.isDark ? '#007AFF' : '#007AFF'} />
+                <View style={{ marginRight: 4 }}>
+                  <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
+                </View>
               )}
             </TouchableOpacity>
           ))}
@@ -227,6 +229,7 @@ const styles = StyleSheet.create({
   currencyLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   currencyIcon: {
     width: 40,
@@ -241,7 +244,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   currencyText: {
-    flex: 1,
+    justifyContent: 'center',
   },
   currencyName: {
     fontSize: 16,

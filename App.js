@@ -1,7 +1,7 @@
 import './global.css';
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Platform, StyleSheet, Text } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -20,6 +20,8 @@ import ExpensesDetailScreen from './src/screens/ExpensesDetailScreen';
 import AddInvestmentScreen from './src/screens/AddInvestmentScreen';
 import InvestmentsDetailScreen from './src/screens/InvestmentsDetailScreen';
 import SpendingDetailsScreen from './src/screens/SpendingDetailsScreen';
+import ReportsScreen from './src/screens/ReportsScreen';
+import { GlobalAlertComponent } from './src/components/GlobalAlert';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import { useNavigation } from '@react-navigation/native';
 
@@ -27,8 +29,9 @@ const Stack = createNativeStackNavigator();
 
 // Stack navigator for modals and additional screens
 function AppStack() {
+  const { theme } = useTheme();
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.colors.background } }}>
       <Stack.Screen name="MainTabs" component={MainTabs} />
       <Stack.Screen name="MonthlyRecord" component={MonthlyRecordScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
@@ -39,6 +42,7 @@ function AppStack() {
       <Stack.Screen name="AddInvestment" component={AddInvestmentScreen} />
       <Stack.Screen name="InvestmentsDetail" component={InvestmentsDetailScreen} />
       <Stack.Screen name="SpendingDetails" component={SpendingDetailsScreen} />
+      <Stack.Screen name="Reports" component={ReportsScreen} />
     </Stack.Navigator>
   );
 }
@@ -144,18 +148,20 @@ function MainTabs() {
     <TabBar
       {...props}
       style={{
-        backgroundColor: theme.isDark ? theme.colors.background : theme.colors.tabBar, // Match dashboard bg in dark mode
+        position: 'absolute',
+        bottom: 15,
+        left: 20,
+        right: 20,
+        backgroundColor: theme.isDark ? theme.colors.card : theme.colors.tabBar,
         borderTopWidth: 0,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
         shadowRadius: 8,
         elevation: 15,
         paddingBottom: 6,
         paddingTop: 6,
-        height: 60, // Reduced height
-        marginHorizontal: 20, // Side margins for floating effect
-        marginBottom: 10, // Bottom margin for floating effect
+        height: 60,
         borderRadius: 25, // Rounded corners like Telegram
       }}
       tabStyle={{
@@ -201,37 +207,60 @@ function MainTabs() {
   );
 }
 
+function RootNavigator({ user }) {
+  const { theme } = useTheme();
+
+  if (user === undefined) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.background }}>
+        <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
+
+  const baseTheme = theme.isDark ? DarkTheme : DefaultTheme;
+  const customNavTheme = {
+    ...baseTheme,
+    dark: theme.isDark,
+    colors: {
+      ...baseTheme.colors,
+      primary: theme.colors.primary,
+      background: theme.colors.background,
+      card: theme.colors.card,
+      text: theme.colors.text,
+      border: theme.colors.border,
+      notification: theme.colors.primary,
+    },
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <NavigationContainer theme={customNavTheme}>
+        <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+        {user ? (
+          <AppStack />
+        ) : (
+          <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.colors.background } }}>
+            <Stack.Screen name="Login" component={LoginScreen} />
+          </Stack.Navigator>
+        )}
+      </NavigationContainer>
+      <GlobalAlertComponent />
+    </View>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(undefined);
 
   useEffect(() => subscribeToAuthChanges(setUser), []);
 
-  let content;
-  if (user === undefined) {
-    content = (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' }}>
-        <StatusBar style="auto" />
-        <ActivityIndicator size="large" color="#0088cc" />
-      </View>
-    );
-  } else {
-    content = (
-      <NavigationContainer>
-        <StatusBar style="auto" />
-        {user ? (
-          <AppStack />
-        ) : (
-          <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
-            <Stack.Screen name="Login" component={LoginScreen} />
-          </Stack.Navigator>
-        )}
-      </NavigationContainer>
-    );
-  }
-
   return (
     <ThemeProvider>
-      <SafeAreaProvider>{content}</SafeAreaProvider>
+      <SafeAreaProvider>
+        <RootNavigator user={user} />
+      </SafeAreaProvider>
     </ThemeProvider>
   );
 }

@@ -250,7 +250,7 @@ const AddExpenseScreen = ({ navigation }) => {
       <StatusBar style="auto" />
       
       {/* Header */}
-      <View style={styles.headerContainer}>
+      <View style={[styles.headerContainer, { borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity
           style={[styles.backButton, { borderColor: theme.colors.border }]}
           onPress={() => navigation.goBack()}
@@ -405,7 +405,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
   },
   backButton: {
     width: 40,
@@ -583,21 +582,21 @@ const styles = StyleSheet.create({
   expenseItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
+    padding: 8,
+    borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 12,
+    marginBottom: 6,
   },
   expenseInfo: {
     flex: 1,
   },
   expenseCategory: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '600',
     marginBottom: 4,
   },
   expenseAmount: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: 'bold',
     marginBottom: 2,
   },
@@ -609,9 +608,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',

@@ -1,9 +1,9 @@
-import { ScrollView, Text, View, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import { ScrollView, Text, View, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl, Image, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrentUser, logoutUser } from '../services/authService';
-import { getMonthlySummary, getMonthlySummaries, getUserProfile } from '../services/firestoreService';
+import { getMonthlySummary, getMonthlySummaries, getUserProfile, getSpending, getInvestments } from '../services/firestoreService';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
@@ -34,15 +34,13 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
     borderBottomWidth: 1,
   },
   stickyHeader: {
     position: 'sticky',
     top: 0,
-    left: 0,
-    right: 0,
     zIndex: 100,
     backgroundColor: 'transparent',
   },
@@ -50,6 +48,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profilePhoto: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 16,
+  },
+  profilePhotoPlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  userText: {
+    flex: 1,
   },
   headerWelcome: {
     fontSize: 12,
@@ -351,14 +374,17 @@ export default function DashboardScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
   const [showIncomeAmount, setShowIncomeAmount] = useState(false);
   const [showBalanceAmount, setShowBalanceAmount] = useState(false);
   const [showSavingsAmount, setShowSavingsAmount] = useState(false);
   const [showExpenseAmount, setShowExpenseAmount] = useState(false);
+  const [allSpending, setAllSpending] = useState([]);
+  const [investments, setInvestments] = useState([]);
 
   const fetchProfile = useCallback(async () => {
     if (!uid) return;
-    setProfileLoading(true);
     try {
       const data = await getUserProfile(uid);
       setProfile(data);
@@ -371,17 +397,26 @@ export default function DashboardScreen({ navigation }) {
 
   const fetchMonthlyData = useCallback(async () => {
     if (!uid) return;
-    setLoading(true);
     try {
-      const data = await getMonthlySummary(uid, selectedMonth);
+      const [data, spendingData, invData] = await Promise.all([
+        getMonthlySummary(uid, selectedMonth),
+        getSpending(uid),
+        getInvestments(uid)
+      ]);
+      
       if (data) {
         setMonthlyData(data);
       } else {
         setMonthlyData(null);
       }
+      
+      setAllSpending(spendingData || []);
+      setInvestments(invData || []);
     } catch (error) {
-      console.error('Failed to fetch monthly summary:', error);
+      console.error('Failed to fetch monthly data:', error);
       setMonthlyData(null);
+      setAllSpending([]);
+      setInvestments([]);
     } finally {
       setLoading(false);
     }
@@ -395,7 +430,8 @@ export default function DashboardScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       fetchProfile();
-    }, [fetchProfile])
+      fetchMonthlyData();
+    }, [fetchProfile, fetchMonthlyData])
   );
 
   // Fetch monthly summary for selected month
@@ -418,8 +454,8 @@ export default function DashboardScreen({ navigation }) {
         savingsInvestments: (monthlyData.savingsAmount || 0) + (monthlyData.investmentAmount || 0),
         expenses: {
           allocated: monthlyData.expensesAmount || 0,
-          spent: monthlyData.expensesAmount || 0, // using allocated as spent for now
-          remaining: monthlyData.balance || 0,
+          spent: allSpending.reduce((sum, spending) => sum + (spending.totalSpending || spending.amount || 0), 0),
+          remaining: (monthlyData.expensesAmount || 0) - allSpending.reduce((sum, spending) => sum + (spending.totalSpending || spending.amount || 0), 0),
         },
         expenseBreakdown: [], // we don't have breakdown in monthly summary yet
         investments: [], // we don't have investments in monthly summary yet
@@ -427,6 +463,16 @@ export default function DashboardScreen({ navigation }) {
     : null;
 
   const expenseProgress = financialData && financialData.expenses.allocated > 0 ? financialData.expenses.spent / financialData.expenses.allocated : 0;
+
+  const calculateDynamicExpensePercentage = () => {
+    if (!financialData) return 0;
+    const spent = financialData.expenses.spent;
+    const remaining = financialData.expenses.remaining;
+    const total = spent + remaining;
+    if (total <= 0) return 0;
+    return (spent / total) * 100;
+  };
+  const exactExpensePercentage = calculateDynamicExpensePercentage();
 
   // Currency from profile, default to KES
   const currencyCode = profile?.currency || 'KES';
@@ -461,6 +507,7 @@ export default function DashboardScreen({ navigation }) {
       newYear -= 1;
     }
     setSelectedMonth(`${newYear}-${String(newMonth).padStart(2, '0')}`);
+    setLoading(true); 
   };
 
   if (loading || profileLoading) {
@@ -475,7 +522,7 @@ export default function DashboardScreen({ navigation }) {
   if (!financialData) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
-        <StatusBar style="auto" />
+        <StatusBar style={theme.isDark ? 'light' : 'dark'} />
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
@@ -499,11 +546,13 @@ export default function DashboardScreen({ navigation }) {
             <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Monthly Financial Overview</Text>
             <View style={styles.monthPickerContainer}>
               <TouchableOpacity style={[styles.monthButton, { backgroundColor: theme.colors.tabBarActive }]} onPress={() => changeMonth(-1)}>
-                <Text style={[styles.monthButtonText, { color: '#ffffff' }]}>‹ Previous</Text>
+                <Text style={[styles.monthButtonText, { color: '#ffffff' }]}>‹</Text>
               </TouchableOpacity>
-              <Text style={[styles.monthText, { color: theme.colors.text }]}>{selectedMonth}</Text>
+              <TouchableOpacity onPress={() => { setPickerYear(parseInt(selectedMonth.split('-')[0])); setShowMonthPicker(true); }} style={{ paddingHorizontal: 10, paddingVertical: 4 }}>
+                <Text style={[styles.monthText, { color: theme.colors.text }]}>{selectedMonth} ▾</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={[styles.monthButton, { backgroundColor: theme.colors.tabBarActive }]} onPress={() => changeMonth(1)}>
-                <Text style={[styles.monthButtonText, { color: '#ffffff' }]}>Next ›</Text>
+                <Text style={[styles.monthButtonText, { color: '#ffffff' }]}>›</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.addRecordButton, { backgroundColor: theme.colors.tabBarActive }]}
@@ -536,39 +585,52 @@ export default function DashboardScreen({ navigation }) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
-      <StatusBar style="auto" />
+      <StatusBar style={theme.isDark ? 'light' : 'dark'} />
       
-      {/* Sticky Header with Month Navigation */}
-      <View style={[styles.stickyHeader, { backgroundColor: theme.colors.background }]}>
-        <View style={styles.headerContainer}>
-          <View style={styles.headerRow}>
-            <View style={styles.userInfo}>
-              <Text style={[styles.headerWelcome, { color: theme.colors.textSecondary }]}>Welcome back 👋</Text>
-              <Text style={[styles.headerName, { color: theme.colors.text }]}>{displayName}</Text>
+      {/* Header with Month Navigation */}
+      <View style={[styles.headerContainer, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+        <View style={styles.headerRow}>
+          <View style={styles.userInfo}>
+            <View style={styles.userHeader}>
+              <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+                {profile?.photoURL || user?.photoURL ? (
+                  <Image source={{ uri: profile?.photoURL || user?.photoURL }} style={styles.profilePhoto} />
+                ) : (
+                  <View style={[styles.profilePhotoPlaceholder, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                    <Ionicons name="person-outline" size={24} color={theme.colors.textSecondary} />
+                  </View>
+                )}
+              </TouchableOpacity>
+              <View style={styles.userText}>
+                <Text style={[styles.headerWelcome, { color: theme.colors.textSecondary }]}>Welcome back 👋</Text>
+                <Text style={[styles.headerName, { color: theme.colors.text }]}>{displayName}</Text>
+              </View>
             </View>
-            <TouchableOpacity
-              style={[styles.signOutButton, { borderColor: theme.colors.border }]}
-              onPress={logoutUser}
-            >
-              <Text style={[styles.signOutButtonText, { color: theme.colors.text }]}>Sign Out</Text>
-            </TouchableOpacity>
           </View>
-          <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Monthly Financial Overview</Text>
-          <View style={styles.monthPickerContainer}>
-            <TouchableOpacity style={[styles.monthButton, { backgroundColor: theme.colors.tabBarActive }]} onPress={() => changeMonth(-1)}>
-              <Text style={[styles.monthButtonText, { color: '#ffffff' }]}>‹ Previous</Text>
-            </TouchableOpacity>
-            <Text style={[styles.monthText, { color: theme.colors.text }]}>{selectedMonth}</Text>
-            <TouchableOpacity style={[styles.monthButton, { backgroundColor: theme.colors.tabBarActive }]} onPress={() => changeMonth(1)}>
-              <Text style={[styles.monthButtonText, { color: '#ffffff' }]}>Next ›</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.addRecordButton, { backgroundColor: theme.colors.tabBarActive }]}
-              onPress={() => navigation.navigate('MonthlyRecord')}
-            >
-              <Text style={styles.addRecordButtonText}>+ Add Record</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={[styles.signOutButton, { borderColor: theme.colors.border }]}
+            onPress={logoutUser}
+          >
+            <Ionicons name="log-out-outline" size={20} color="#ef4444" />
+          </TouchableOpacity>
+        </View>
+        <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>Monthly Financial Overview</Text>
+        <View style={styles.monthPickerContainer}>
+          <TouchableOpacity style={[styles.monthButton, { backgroundColor: theme.colors.tabBarActive }]} onPress={() => changeMonth(-1)}>
+            <Text style={[styles.monthButtonText, { color: '#ffffff' }]}>‹</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setPickerYear(parseInt(selectedMonth.split('-')[0])); setShowMonthPicker(true); }} style={{ paddingHorizontal: 10, paddingVertical: 4 }}>
+            <Text style={[styles.monthText, { color: theme.colors.text }]}>{selectedMonth} ▾</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.monthButton, { backgroundColor: theme.colors.tabBarActive }]} onPress={() => changeMonth(1)}>
+            <Text style={[styles.monthButtonText, { color: '#ffffff' }]}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.addRecordButton, { backgroundColor: theme.colors.tabBarActive }]}
+            onPress={() => navigation.navigate('MonthlyRecord')}
+          >
+            <Text style={styles.addRecordButtonText}>+ Add Record</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -587,7 +649,10 @@ export default function DashboardScreen({ navigation }) {
           {/* ── Income Card ── */}
           <View style={[styles.cardGreen, { backgroundColor: theme.colors.card }]}>
             <View style={styles.cardHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Income for {formatMonthName(selectedMonth)}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="wallet-outline" size={20} color={theme.colors.text} style={{ marginRight: 8 }} />
+                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Income for {formatMonthName(selectedMonth)}</Text>
+              </View>
               <TouchableOpacity
                 style={[styles.cardToggle, { borderColor: theme.colors.border }]}
                 onPress={() => setShowIncomeAmount(!showIncomeAmount)}
@@ -595,7 +660,7 @@ export default function DashboardScreen({ navigation }) {
                 <Ionicons name={showIncomeAmount ? 'eye-off-outline' : 'eye-outline'} size={16} color={theme.colors.tabBarActive} />
               </TouchableOpacity>
             </View>
-            <Text style={[styles.cardValue, { color: theme.colors.text }]} numberOfLines={2} ellipsizeMode="tail">
+            <Text style={[styles.cardValue, { color: '#10b981' }]} numberOfLines={2} ellipsizeMode="tail">
               {showIncomeAmount ? fmt(financialData.income) : '••••••'}
             </Text>
           </View>
@@ -603,7 +668,10 @@ export default function DashboardScreen({ navigation }) {
           {/* ── Savings & Investments Card ── */}
           <View style={[styles.cardPurple, { backgroundColor: theme.colors.card }]}>
             <View style={styles.cardHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Investments</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="trending-up-outline" size={20} color={theme.colors.text} style={{ marginRight: 8 }} />
+                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Investments</Text>
+              </View>
               <View style={styles.cardActions}>
                 <TouchableOpacity
                   style={[styles.cardToggle, { borderColor: theme.colors.border }]}
@@ -628,15 +696,31 @@ export default function DashboardScreen({ navigation }) {
             <Text style={[styles.cardValue, { color: theme.colors.text }]} numberOfLines={2} ellipsizeMode="tail">
               {showSavingsAmount ? fmt(financialData.savingsInvestments) : '••••••'}
             </Text>
-            <Text style={[styles.cardSubtitle, { color: theme.colors.textSecondary }]}>
-              {financialData.income > 0 ? Math.round((financialData.savingsInvestments / financialData.income) * 100) : 0}% of income
-            </Text>
+            {investments.length > 0 && (
+              <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
+                <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginBottom: 8, fontWeight: '600' }}>Portfolio Overview:</Text>
+                {investments.slice(0, 3).map((inv, idx) => (
+                  <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 13, color: theme.colors.text, flex: 1 }} numberOfLines={1}>{inv.platform} ({inv.category})</Text>
+                    <Text style={{ fontSize: 13, color: theme.colors.text, fontWeight: '500' }}>
+                      {showSavingsAmount ? fmt(inv.amount) : '•••'}
+                    </Text>
+                  </View>
+                ))}
+                {investments.length > 3 && (
+                  <Text style={{ fontSize: 12, color: theme.colors.tabBarActive, marginTop: 4 }}>+ {investments.length - 3} more...</Text>
+                )}
+              </View>
+            )}
           </View>
 
           {/* ── Expenses Overview ── */}
           <View style={[styles.cardWhite, { backgroundColor: theme.colors.card }]}>
             <View style={styles.cardHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Expenses</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="cart-outline" size={20} color={theme.colors.text} style={{ marginRight: 8 }} />
+                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Expenses</Text>
+              </View>
               <View style={styles.cardActions}>
                 <TouchableOpacity
                   style={[styles.actionButton, { borderColor: theme.colors.border }]}
@@ -675,15 +759,32 @@ export default function DashboardScreen({ navigation }) {
               </View>
               <View style={styles.summaryRow}>
                 <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Spent:</Text>
-                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-                  {showExpenseAmount ? fmt(financialData.expenses.spent) : '•••••'}
-                </Text>
+                <View style={styles.amountWithPercentage}>
+                  <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
+                    {showExpenseAmount ? fmt(financialData.expenses.spent) : '•••••'}
+                  </Text>
+                  {showExpenseAmount && (
+                    <Text style={[styles.summaryPercentage, { color: theme.colors.textSecondary }]}>
+                      ({Math.round(exactExpensePercentage)}%)
+                    </Text>
+                  )}
+                </View>
               </View>
               <View style={[styles.summaryRow, styles.balanceRow]}>
                 <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Remaining:</Text>
-                <Text style={[styles.summaryValue, (financialData.expenses.allocated - financialData.expenses.spent) >= 0 ? styles.positive : styles.negative]}>
-                  {showExpenseAmount ? fmt(financialData.expenses.allocated - financialData.expenses.spent) : '•••••'}
-                </Text>
+                <View style={styles.amountWithPercentage}>
+                  <Text style={[
+                    styles.summaryValue, 
+                    { color: (financialData.expenses.allocated - financialData.expenses.spent) >= 0 ? '#10b981' : '#ef4444' }
+                  ]}>
+                    {showExpenseAmount ? fmt(financialData.expenses.remaining) : '•••••'}
+                  </Text>
+                  {showExpenseAmount && (
+                    <Text style={[styles.summaryPercentage, { color: theme.colors.textSecondary }]}>
+                      ({Math.round(100 - exactExpensePercentage)}%)
+                    </Text>
+                  )}
+                </View>
               </View>
             </View>
           </View>
@@ -691,7 +792,10 @@ export default function DashboardScreen({ navigation }) {
           {/* ── Balance Card ── */}
           <View style={[styles.cardBlue, { backgroundColor: theme.colors.card }]}>
             <View style={styles.cardHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Unallocated</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="shield-checkmark-outline" size={20} color={theme.colors.text} style={{ marginRight: 8 }} />
+                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Savings/Unallocated</Text>
+              </View>
               <TouchableOpacity
                 style={[styles.cardToggle, { borderColor: theme.colors.border }]}
                 onPress={() => setShowBalanceAmount(!showBalanceAmount)}
@@ -709,10 +813,15 @@ export default function DashboardScreen({ navigation }) {
 
           {/* ── Summary ── */}
           <View style={[styles.summaryContainer, { backgroundColor: theme.colors.tabBarActive }]}>
-            <Text style={[styles.summaryTitle, { color: theme.colors.text }]}>Monthly Summary</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={[styles.summaryTitle, { color: theme.colors.text, marginBottom: 0 }]}>Monthly Summary</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Reports')} style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}>
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>View Reports</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={[styles.summaryText, { color: '#c7d2fe' }]}>
-              You've saved {fmt(financialData.savingsInvestments)} this month — {financialData.income > 0 ? Math.round((financialData.savingsInvestments / financialData.income) * 100) : 0}% of your income.
-              Expenses are at {Math.round(expenseProgress * 100)}% of budget with{' '}
+              You've invested {fmt(financialData.savingsInvestments)} this month — {financialData.income > 0 ? Math.round((financialData.savingsInvestments / financialData.income) * 100) : 0}% of your income.
+              Expenses are at {Math.round(exactExpensePercentage)}% with{' '}
               {fmt(financialData.expenses.remaining)} remaining.
             </Text>
           </View>
@@ -724,6 +833,45 @@ export default function DashboardScreen({ navigation }) {
 
         </View>
       </ScrollView>
+
+      {/* Month Picker Modal */}
+      <Modal visible={showMonthPicker} animationType="fade" transparent={true} onRequestClose={() => setShowMonthPicker(false)}>
+        <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }} activeOpacity={1} onPress={() => setShowMonthPicker(false)}>
+          <TouchableOpacity activeOpacity={1} style={{ width: '80%', padding: 20, backgroundColor: theme.colors.card, borderRadius: 16, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, elevation: 5 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <TouchableOpacity onPress={() => setPickerYear(pickerYear - 1)} style={{ padding: 10 }}>
+                <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+              <Text style={{ fontSize: 20, fontWeight: 'bold', color: theme.colors.text }}>{pickerYear}</Text>
+              <TouchableOpacity onPress={() => setPickerYear(pickerYear + 1)} style={{ padding: 10 }}>
+                <Ionicons name="chevron-forward" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+              {Array.from({ length: 12 }).map((_, i) => {
+                const isSelected = selectedMonth === `${pickerYear}-${String(i + 1).padStart(2, '0')}`;
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    style={{ width: '30%', height: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 12, borderRadius: 8, backgroundColor: isSelected ? theme.colors.tabBarActive : theme.colors.background }}
+                    onPress={() => {
+                      if (selectedMonth !== `${pickerYear}-${String(i + 1).padStart(2, '0')}`) {
+                        setLoading(true);
+                      }
+                      setSelectedMonth(`${pickerYear}-${String(i + 1).padStart(2, '0')}`);
+                      setShowMonthPicker(false);
+                    }}
+                  >
+                    <Text style={{ color: isSelected ? '#fff' : theme.colors.text, fontWeight: isSelected ? 'bold' : 'normal' }}>
+                      {new Date(2000, i).toLocaleString('default', { month: 'short' })}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }

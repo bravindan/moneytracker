@@ -232,6 +232,23 @@ export const addSpending = (uid, data) =>
   });
 
 /**
+ * Delete a spending record.
+ * @param {string} uid
+ * @param {string} spendingId
+ */
+export const deleteSpending = (uid, spendingId) =>
+  deleteDoc(doc(collection(db, 'users', uid, 'spending'), spendingId));
+
+/**
+ * Update a spending record.
+ * @param {string} uid
+ * @param {string} spendingId
+ * @param {object} updates
+ */
+export const updateSpending = (uid, spendingId, updates) =>
+  updateDoc(doc(collection(db, 'users', uid, 'spending'), spendingId), updates);
+
+/**
  * Fetch all spending records for a user.
  * @param {string} uid
  * @returns {Promise<object[]>}

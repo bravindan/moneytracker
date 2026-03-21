@@ -4,6 +4,9 @@ import {
   signOut,
   sendPasswordResetEmail,
   updateProfile,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   onAuthStateChanged,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
@@ -45,6 +48,40 @@ export const logoutUser = () => signOut(auth);
  */
 export const resetPassword = (email) =>
   sendPasswordResetEmail(auth, email);
+
+/**
+ * Change the current user's password.
+ * @param {string} currentPassword
+ * @param {string} newPassword
+ * @returns {Promise<void>}
+ */
+export const changePassword = async (currentPassword, newPassword) => {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error('No authenticated user found');
+  }
+
+  // Reauthenticate user first
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+
+  // Update password
+  await updatePassword(user, newPassword);
+};
+
+/**
+ * Update user profile with photo URL.
+ * @param {string} photoURL
+ * @returns {Promise<void>}
+ */
+export const updateUserPhoto = async (photoURL) => {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('No authenticated user found');
+  }
+  
+  await updateProfile(user, { photoURL });
+};
 
 /**
  * Subscribe to auth state changes.

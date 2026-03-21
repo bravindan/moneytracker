@@ -246,7 +246,7 @@ const AddInvestmentScreen = ({ navigation }) => {
       <StatusBar style="auto" />
       
       {/* Header */}
-      <View style={styles.headerContainer}>
+      <View style={[styles.headerContainer, { borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity
           style={[styles.backButton, { borderColor: theme.colors.border }]}
           onPress={() => navigation.goBack()}
@@ -404,7 +404,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
   },
   backButton: {
     width: 40,

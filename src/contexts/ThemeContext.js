@@ -16,6 +16,7 @@ export const ThemeProvider = ({ children }) => {
   const systemColorScheme = useColorScheme();
   const [themeMode, setThemeMode] = useState('system');
   const [theme, setTheme] = useState({
+    isDark: false,
     colors: {
       primary: '#0088cc',
       background: '#ffffff',
@@ -67,6 +68,7 @@ export const ThemeProvider = ({ children }) => {
 
     if (isDark) {
       setTheme({
+        isDark: true,
         colors: {
           primary: '#007AFF', // iOS blue
           background: '#000000', // Pure black for OLED
@@ -82,6 +84,7 @@ export const ThemeProvider = ({ children }) => {
       });
     } else {
       setTheme({
+        isDark: false,
         colors: {
           primary: '#007AFF', // iOS blue
           background: '#F2F2F7', // iOS light background

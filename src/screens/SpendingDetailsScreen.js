@@ -12,7 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { getCurrentUser } from '../services/authService';
-import { getSpendingByCategory } from '../services/firestoreService';
+import { getSpendingByCategory, deleteSpending, updateSpending, addSpending } from '../services/firestoreService';
+import { Alert, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 
 const SpendingDetailsScreen = ({ route, navigation }) => {
   const { theme } = useTheme();
@@ -25,11 +26,32 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   const [spendingList, setSpendingList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [item, setItem] = useState('');
   const [amount, setAmount] = useState('');
   const [transactionCosts, setTransactionCosts] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date());
+
+  const handleEditSpending = (spending) => {
+    setEditingId(spending.id);
+    setItem(spending.itemName || '');
+    setAmount(spending.amount.toString());
+    setTransactionCosts((spending.transactionCosts || 0).toString());
+    setDescription(spending.description || '');
+    setDate(spending.date?.toDate ? spending.date.toDate() : new Date(spending.date));
+    setShowAddModal(true);
+  };
+
+  const handleOpenAddModal = () => {
+    setEditingId(null);
+    setItem('');
+    setAmount('');
+    setTransactionCosts('');
+    setDescription('');
+    setDate(new Date());
+    setShowAddModal(true);
+  };
 
 
   // Handle save spending
@@ -50,23 +72,50 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
         totalSpending: parseFloat(amount) + parseFloat(transactionCosts || 0)
       };
 
-      await addSpending(user.uid, spendingData);
+      if (editingId) {
+        await updateSpending(user.uid, editingId, spendingData);
+        setSpendingList(prev => prev.map(s => s.id === editingId ? { ...s, ...spendingData, id: editingId } : s));
+        Alert.alert('Success', 'Spending updated successfully!');
+      } else {
+        const result = await addSpending(user.uid, spendingData);
+        setSpendingList(prev => [{ ...spendingData, id: result.id, createdAt: { toDate: () => new Date() } }, ...prev]);
+        Alert.alert('Success', 'Spending added successfully!');
+      }
       
-      Alert.alert('Success', 'Spending added successfully!');
       setShowAddModal(false);
       setItem('');
       setAmount('');
       setTransactionCosts('');
       setDescription('');
       setDate(new Date());
-      
-      // Reload spending list to show new item
-      const updatedSpendingList = await getSpendingByCategory(user.uid, category);
-      setSpendingList(updatedSpendingList);
+      setEditingId(null);
     } catch (error) {
       console.error('Error saving spending:', error);
       Alert.alert('Error', 'Failed to save spending');
     }
+  };
+
+  const handleDeleteSpending = (id) => {
+    Alert.alert(
+      'Delete Spending',
+      'Are you sure you want to delete this record? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteSpending(user.uid, id);
+              setSpendingList(prev => prev.filter(item => item.id !== id));
+            } catch (error) {
+              console.error('Delete error', error);
+              Alert.alert('Error', 'Could not delete record');
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Load spending data for the specific category
@@ -92,10 +141,17 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   const renderSpendingItem = ({ item: spending }) => (
     <View style={[styles.spendingItem, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
       <View style={styles.spendingHeader}>
-        <Text style={[styles.spendingCategory, { color: theme.colors.text }]}>{spending.category}</Text>
-        <Text style={[styles.spendingDate, { color: theme.colors.textSecondary }]}>
-          {new Date(spending.date?.toDate()).toLocaleDateString()}
+        <Text style={[styles.spendingCategory, { color: theme.colors.text }]}>
+          {new Date(spending.date?.toDate ? spending.date.toDate() : spending.date).toLocaleDateString()}
         </Text>
+        <View style={{ flexDirection: 'row', gap: 16 }}>
+          <TouchableOpacity onPress={() => handleEditSpending(spending)}>
+            <Ionicons name="pencil-outline" size={20} color={theme.colors.tabBarActive} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleDeleteSpending(spending.id)}>
+            <Ionicons name="trash-outline" size={20} color="#ef4444" />
+          </TouchableOpacity>
+        </View>
       </View>
       
       <View style={styles.spendingDetails}>
@@ -114,7 +170,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
         </View>
         
         <View style={styles.detailRow}>
-          <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>Transaction Costs:</Text>
+          <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>Transaction Cost:</Text>
           <Text style={[styles.detailValue, { color: theme.colors.text }]}>
             KES {spending.transactionCosts.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Text>
@@ -128,13 +184,6 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
             </Text>
           </View>
         )}
-        
-        <View style={styles.detailRow}>
-          <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>Date:</Text>
-          <Text style={[styles.detailValue, { color: theme.colors.text }]}>
-            {new Date(spending.date?.toDate()).toLocaleDateString()}
-          </Text>
-        </View>
         
         <View style={styles.detailRow}>
           <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>Total Spending:</Text>
@@ -161,7 +210,9 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
           Spending Details - {category}
         </Text>
-        <View style={styles.placeholder} />
+        <TouchableOpacity style={styles.placeholder} onPress={handleOpenAddModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="add" size={28} color={theme.colors.tabBarActive} style={{ textAlign: 'right' }} />
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -175,7 +226,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
           </Text>
           <TouchableOpacity
             style={[styles.addSpendingButton, { backgroundColor: theme.colors.tabBarActive }]}
-            onPress={handleAddSpending}
+            onPress={handleOpenAddModal}
           >
             <Ionicons name="add-circle-outline" size={16} color="#fff" />
             <Text style={styles.addSpendingButtonText}>Add Spending</Text>
@@ -191,6 +242,95 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
           />
         </>
       )}
+
+      {/* Dynamic Edit/Add Modal */}
+      <Modal
+        visible={showAddModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center' }]}
+        >
+          <View style={[{ backgroundColor: theme.colors.card, maxHeight: '90%', marginHorizontal: 20, borderRadius: 16, overflow: 'hidden', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomColor: theme.colors.border, borderBottomWidth: 1, padding: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.colors.text }}>
+                {editingId ? `Edit Spending` : `Add Spending`}
+              </Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={{ padding: 16 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ marginBottom: 8, color: theme.colors.textSecondary }}>Item Name:</Text>
+                <TextInput
+                  style={[{ borderWidth: 1, borderRadius: 8, padding: 12 }, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="e.g., Coffee, Groceries, etc."
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={item}
+                  onChangeText={setItem}
+                />
+              </View>
+
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ marginBottom: 8, color: theme.colors.textSecondary }}>Amount:</Text>
+                <TextInput
+                  style={[{ borderWidth: 1, borderRadius: 8, padding: 12 }, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="0.00"
+                  keyboardType="numeric"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={amount}
+                  onChangeText={setAmount}
+                />
+              </View>
+
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ marginBottom: 8, color: theme.colors.textSecondary }}>Transaction Cost (Optional):</Text>
+                <TextInput
+                  style={[{ borderWidth: 1, borderRadius: 8, padding: 12 }, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="0.00"
+                  keyboardType="numeric"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={transactionCosts}
+                  onChangeText={setTransactionCosts}
+                />
+              </View>
+
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ marginBottom: 8, color: theme.colors.textSecondary }}>Description:</Text>
+                <TextInput
+                  style={[{ borderWidth: 1, borderRadius: 8, padding: 12 }, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="What did you spend on?"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                  value={description}
+                  onChangeText={setDescription}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', marginRight: 8 }}
+                onPress={() => setShowAddModal(false)}
+              >
+                <Text style={{ color: theme.colors.text, fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 12, borderRadius: 8, backgroundColor: theme.colors.tabBarActive, alignItems: 'center', marginLeft: 8 }}
+                onPress={handleSaveSpending}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>{editingId ? 'Update' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 };
