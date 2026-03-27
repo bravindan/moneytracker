@@ -1,8 +1,12 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { initializeApp, getApps, getApp } from "firebase/app";
+import {
+  getAuth,
+  initializeAuth,
+  getReactNativePersistence,
+} from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Firebase project config — values come from EXPO_PUBLIC_ env vars
 // Copy .env.example to .env and fill in your Firebase project credentials
@@ -15,18 +19,41 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Prevent duplicate app initialization (useful with hot reload)
-const isNew = getApps().length === 0;
-const app = isNew ? initializeApp(firebaseConfig) : getApp();
+const requiredConfigKeys = ["apiKey", "authDomain", "projectId", "appId"];
 
-// Auth — use AsyncStorage for session persistence across app restarts
-const auth = isNew
-  ? initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage),
-    })
-  : getAuth(app);
+let app = null;
+let auth = null;
+let db = null;
+let storage = null;
+let firebaseInitError = "";
 
-const db = getFirestore(app);
-const storage = getStorage(app);
+const missingKeys = requiredConfigKeys.filter((key) => !firebaseConfig[key]);
 
-export { app, auth, db, storage };
+try {
+  if (missingKeys.length > 0) {
+    throw new Error(
+      `Missing Firebase config: ${missingKeys.join(", ")}. Ensure EXPO_PUBLIC_* vars are set for this build profile.`,
+    );
+  }
+
+  // Prevent duplicate app initialization (useful with hot reload)
+  const isNew = getApps().length === 0;
+  app = isNew ? initializeApp(firebaseConfig) : getApp();
+
+  // Auth — use AsyncStorage for session persistence across app restarts
+  auth = isNew
+    ? initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
+      })
+    : getAuth(app);
+
+  db = getFirestore(app);
+  storage = getStorage(app);
+} catch (error) {
+  firebaseInitError = error?.message ?? "Unknown Firebase initialization error";
+  console.error("Firebase initialization failed:", firebaseInitError);
+}
+
+const isFirebaseReady = Boolean(app && auth && db && storage);
+
+export { app, auth, db, storage, isFirebaseReady, firebaseInitError };

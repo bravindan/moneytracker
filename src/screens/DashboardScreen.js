@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl, Image, Modal } from 'react-native';
+import { ScrollView, Text, View, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +18,16 @@ const formatMonthName = (monthString) => {
   const [year, month] = monthString.split('-').map(Number);
   const date = new Date(year, month - 1);
   return date.toLocaleString('default', { month: 'long', year: 'numeric' });
+};
+
+const generateAvatar = (name, theme) => {
+  const firstLetter = name ? name.charAt(0).toUpperCase() : '?';
+  return {
+    text: firstLetter,
+    color: theme.colors.primary,
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+  };
 };
 
 const styles = StyleSheet.create({
@@ -55,12 +65,6 @@ const styles = StyleSheet.create({
   userHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  profilePhoto: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 16,
   },
   profilePhotoPlaceholder: {
     width: 50,
@@ -361,6 +365,10 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
   },
+  avatarText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
 });
 
 export default function DashboardScreen({ navigation }) {
@@ -593,13 +601,11 @@ export default function DashboardScreen({ navigation }) {
           <View style={styles.userInfo}>
             <View style={styles.userHeader}>
               <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-                {profile?.photoURL || user?.photoURL ? (
-                  <Image source={{ uri: profile?.photoURL || user?.photoURL }} style={styles.profilePhoto} />
-                ) : (
-                  <View style={[styles.profilePhotoPlaceholder, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                    <Ionicons name="person-outline" size={24} color={theme.colors.textSecondary} />
+                  <View style={[styles.profilePhotoPlaceholder, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                    <Text style={[styles.avatarText, { color: generateAvatar(displayName, theme).color }]}>
+                      {generateAvatar(displayName, theme).text}
+                    </Text>
                   </View>
-                )}
               </TouchableOpacity>
               <View style={styles.userText}>
                 <Text style={[styles.headerWelcome, { color: theme.colors.textSecondary }]}>Welcome back 👋</Text>

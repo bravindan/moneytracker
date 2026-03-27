@@ -8,8 +8,14 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
   onAuthStateChanged,
-} from 'firebase/auth';
-import { auth } from '../config/firebase';
+} from "firebase/auth";
+import { auth, isFirebaseReady, firebaseInitError } from "../config/firebase";
+
+const ensureAuthReady = () => {
+  if (!isFirebaseReady || !auth) {
+    throw new Error(firebaseInitError || "Firebase auth is not initialized");
+  }
+};
 
 /**
  * Register a new user with email and password.
@@ -19,7 +25,12 @@ import { auth } from '../config/firebase';
  * @returns {Promise<import('firebase/auth').UserCredential>}
  */
 export const registerUser = async (email, password, displayName) => {
-  const credential = await createUserWithEmailAndPassword(auth, email, password);
+  ensureAuthReady();
+  const credential = await createUserWithEmailAndPassword(
+    auth,
+    email,
+    password,
+  );
   if (displayName) {
     await updateProfile(credential.user, { displayName });
   }
@@ -32,22 +43,26 @@ export const registerUser = async (email, password, displayName) => {
  * @param {string} password
  * @returns {Promise<import('firebase/auth').UserCredential>}
  */
-export const loginUser = (email, password) =>
-  signInWithEmailAndPassword(auth, email, password);
+export const loginUser = (email, password) => (
+  ensureAuthReady(),
+  signInWithEmailAndPassword(auth, email, password)
+);
 
 /**
  * Sign out the current user.
  * @returns {Promise<void>}
  */
-export const logoutUser = () => signOut(auth);
+export const logoutUser = () => (ensureAuthReady(), signOut(auth));
 
 /**
  * Send a password-reset email.
  * @param {string} email
  * @returns {Promise<void>}
  */
-export const resetPassword = (email) =>
-  sendPasswordResetEmail(auth, email);
+export const resetPassword = (email) => (
+  ensureAuthReady(),
+  sendPasswordResetEmail(auth, email)
+);
 
 /**
  * Change the current user's password.
@@ -56,9 +71,10 @@ export const resetPassword = (email) =>
  * @returns {Promise<void>}
  */
 export const changePassword = async (currentPassword, newPassword) => {
+  ensureAuthReady();
   const user = auth.currentUser;
   if (!user || !user.email) {
-    throw new Error('No authenticated user found');
+    throw new Error("No authenticated user found");
   }
 
   // Reauthenticate user first
@@ -70,29 +86,17 @@ export const changePassword = async (currentPassword, newPassword) => {
 };
 
 /**
- * Update user profile with photo URL.
- * @param {string} photoURL
- * @returns {Promise<void>}
- */
-export const updateUserPhoto = async (photoURL) => {
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error('No authenticated user found');
-  }
-  
-  await updateProfile(user, { photoURL });
-};
-
-/**
  * Subscribe to auth state changes.
  * @param {(user: import('firebase/auth').User | null) => void} callback
  * @returns {() => void} Unsubscribe function
  */
 export const subscribeToAuthChanges = (callback) =>
-  onAuthStateChanged(auth, callback);
+  isFirebaseReady && auth
+    ? onAuthStateChanged(auth, callback)
+    : (callback(null), () => {});
 
 /**
  * Get the currently signed-in user (null if not authenticated).
  * @returns {import('firebase/auth').User | null}
  */
-export const getCurrentUser = () => auth.currentUser;
+export const getCurrentUser = () => (auth ? auth.currentUser : null);

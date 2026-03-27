@@ -9,15 +9,12 @@ import {
   StatusBar,
   Alert,
   ActivityIndicator,
-  Image,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
-import { getCurrentUser, changePassword, updateUserPhoto } from '../services/authService';
+import { getCurrentUser, changePassword } from '../services/authService';
 import { getUserProfile, updateUserProfile } from '../services/firestoreService';
 import CustomAlert from '../components/CustomAlert';
 
@@ -29,7 +26,6 @@ const ProfileScreen = ({ navigation }) => {
   const [saving, setSaving] = useState(false);
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
-  const [profilePhoto, setProfilePhoto] = useState(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -41,6 +37,17 @@ const ProfileScreen = ({ navigation }) => {
   const user = getCurrentUser();
   const uid = user?.uid;
 
+  // Generate avatar from first letter of username
+  const generateAvatar = (name) => {
+    const firstLetter = name ? name.charAt(0).toUpperCase() : '?';
+    return {
+      text: firstLetter,
+      color: theme.colors.primary,
+      backgroundColor: theme.colors.card,
+      borderColor: theme.colors.border,
+    };
+  };
+
   useEffect(() => {
     if (!uid) return;
     const fetchProfile = async () => {
@@ -51,7 +58,6 @@ const ProfileScreen = ({ navigation }) => {
           setProfile(data);
           setUsername(data.username || data.displayName || '');
           setPhone(data.phone || '');
-          setProfilePhoto(data.photoURL || user?.photoURL || null);
         }
       } catch (error) {
         console.error('Failed to fetch profile:', error);
@@ -73,7 +79,7 @@ const ProfileScreen = ({ navigation }) => {
     try {
       await updateUserProfile(uid, { username: username.trim() });
       Alert.alert('Success', 'Profile updated');
-      // Refresh profile
+      // Refresh profile to get updated data
       const updated = await getUserProfile(uid);
       setProfile(updated);
     } catch (error) {
@@ -84,28 +90,7 @@ const ProfileScreen = ({ navigation }) => {
     }
   };
 
-  const handlePickImage = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/*'],
-        copyToCacheDirectory: true,
-      });
 
-      if (!result.canceled && result.assets && result.assets[0]) {
-        const asset = result.assets[0];
-        setProfilePhoto(asset.uri);
-        
-        // Update user profile photo
-        await updateUserPhoto(asset.uri);
-        // Update Firestore profile
-        await updateUserProfile(uid, { photoURL: asset.uri });
-        Alert.alert('Success', 'Profile photo updated');
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Could not update profile photo');
-    }
-  };
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -164,22 +149,16 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.placeholder} />
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary, textAlign: 'center' }]}>Manage your account details</Text>
 
-        {/* Profile Photo Section */}
         <View style={styles.photoSection}>
-          <TouchableOpacity onPress={handlePickImage}>
-            {profilePhoto ? (
-              <Image source={{ uri: profilePhoto }} style={styles.profilePhoto} />
-            ) : (
-              <View style={[styles.profilePhotoPlaceholder, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                <Ionicons name="camera-outline" size={40} color={theme.colors.textSecondary} />
-              </View>
-            )}
-          </TouchableOpacity>
-          <Text style={[styles.photoText, { color: theme.colors.textSecondary }]}>Tap to change photo</Text>
+          <View style={[styles.avatarContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Text style={[styles.avatarText, { color: generateAvatar(username).color }]}>
+              {generateAvatar(username).text}
+            </Text>
+          </View>
+          <Text style={[styles.photoText, { color: theme.colors.textSecondary }]}>Account Avatar</Text>
         </View>
 
         <View style={styles.formGroup}>
@@ -304,7 +283,6 @@ const ProfileScreen = ({ navigation }) => {
           )}
           </TouchableOpacity>
         </ScrollView>
-      </KeyboardAvoidingView>
     </View>
   );
 };
@@ -385,12 +363,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  profilePhoto: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 8,
-  },
   profilePhotoPlaceholder: {
     width: 100,
     height: 100,
@@ -399,6 +371,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  avatarContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  avatarText: {
+    fontSize: 40,
+    fontWeight: 'bold',
   },
   photoText: {
     fontSize: 12,
