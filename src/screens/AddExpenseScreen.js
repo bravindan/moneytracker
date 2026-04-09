@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,41 +8,51 @@ import {
   Alert,
   StatusBar,
   FlatList,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../contexts/ThemeContext';
-import { getCurrentUser } from '../services/authService';
-import { addExpense, getExpenses, getMonthlySummary, updateExpense, deleteExpense } from '../services/firestoreService';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../contexts/ThemeContext";
+import { getCurrentUser } from "../services/authService";
+import {
+  addExpense,
+  getExpenses,
+  getMonthlySummary,
+  updateExpense,
+  deleteExpense,
+} from "../services/firestoreService";
 
-const AddExpenseScreen = ({ navigation }) => {
+const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
+
+const AddExpenseScreen = ({ navigation, route }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const user = getCurrentUser();
-  
+
   // Predefined categories
   const [predefinedCategories, setPredefinedCategories] = useState([
-    'Food & Groceries',
-    'Transportation', 
-    'Utilities',
-    'Entertainment',
-    'Healthcare',
-    'Shopping',
-    'Education',
-    'Insurance',
-    'Savings',
-    'Other'
+    "Food & Groceries",
+    "Transportation",
+    "Utilities",
+    "Entertainment",
+    "Healthcare",
+    "Shopping",
+    "Education",
+    "Insurance",
+    "Savings",
+    "Other",
   ]);
-  
+
   // Form state
-  const [category, setCategory] = useState('');
-  const [amount, setAmount] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM format
+  const [category, setCategory] = useState("");
+  const [amount, setAmount] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(
+    route?.params?.selectedMonth || getCurrentMonth(),
+  ); // YYYY-MM format
   const [allocatedAmount, setAllocatedAmount] = useState(0);
-  
+
   // Expenses list
   const [expenses, setExpenses] = useState([]);
-  
+
   // Dropdown states
   const [showDropdown, setShowDropdown] = useState(false);
   const [filteredCategories, setFilteredCategories] = useState([]);
@@ -54,21 +64,25 @@ const AddExpenseScreen = ({ navigation }) => {
     const loadExpensesData = async () => {
       try {
         setLoading(true);
-        
+
         // Get expenses from dedicated expenses collection
-        const expensesData = await getExpenses(user.uid);
+        const expensesData = await getExpenses(user.uid, selectedMonth);
         setExpenses(expensesData);
-        
+
         // Get monthly summary for allocation data
         const monthlyData = await getMonthlySummary(user.uid, selectedMonth);
         const expenseAllocation = monthlyData?.expensesAmount || 0;
         setAllocatedAmount(expenseAllocation);
-        
+
         // Update predefined categories with user-created ones
-        const userCategories = [...new Set(expensesData.map(expense => expense.category))];
-        setPredefinedCategories(prev => [...new Set([...prev, ...userCategories])]);
+        const userCategories = [
+          ...new Set(expensesData.map((expense) => expense.category)),
+        ];
+        setPredefinedCategories((prev) => [
+          ...new Set([...prev, ...userCategories]),
+        ]);
       } catch (error) {
-        console.error('Failed to load expenses data:', error);
+        console.error("Failed to load expenses data:", error);
         setExpenses([]);
         setAllocatedAmount(0);
       } finally {
@@ -81,8 +95,8 @@ const AddExpenseScreen = ({ navigation }) => {
 
   // Calculate allocation percentage based on overall expense allocation
   const calculateAllocation = (expenseAmount) => {
-    if (allocatedAmount <= 0) return '0';
-    
+    if (allocatedAmount <= 0) return "0";
+
     // For editing, exclude current expense from total
     const currentExpensesTotal = expenses.reduce((sum, expense) => {
       if (editingId === expense.id) {
@@ -90,19 +104,24 @@ const AddExpenseScreen = ({ navigation }) => {
       }
       return sum + expense.amount;
     }, 0);
-    
+
     const newTotal = currentExpensesTotal + parseFloat(expenseAmount || 0);
-    return newTotal > 0 ? ((parseFloat(expenseAmount || 0) / allocatedAmount) * 100).toFixed(1) : '0';
+    return newTotal > 0
+      ? ((parseFloat(expenseAmount || 0) / allocatedAmount) * 100).toFixed(1)
+      : "0";
   };
 
   // Filter categories based on input
   const filterCategories = (text) => {
     // Combine predefined categories with user-created categories from expenses
-    const userCategories = [...new Set(expenses.map(expense => expense.category))];
+    const userCategories = [
+      ...new Set(expenses.map((expense) => expense.category)),
+    ];
     const allCategories = [...predefinedCategories, ...userCategories];
-    
-    const filtered = allCategories.filter(cat => 
-      cat.toLowerCase().includes(text.toLowerCase()) && text.length > 0
+
+    const filtered = allCategories.filter(
+      (cat) =>
+        cat.toLowerCase().includes(text.toLowerCase()) && text.length > 0,
     );
     setFilteredCategories(filtered);
     setShowDropdown(true);
@@ -117,51 +136,52 @@ const AddExpenseScreen = ({ navigation }) => {
 
   // Clear form
   const clearForm = () => {
-    setCategory('');
-    setAmount('');
+    setCategory("");
+    setAmount("");
     setEditingId(null);
   };
 
   // Add or update expense
   const handleAddExpense = async () => {
     if (!category || !amount || parseFloat(amount) <= 0) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      Alert.alert("Error", "Please fill in all required fields");
       return;
     }
 
     setLoading(true);
-    
+
     try {
       const expenseData = {
         category: category.trim(),
         amount: parseFloat(amount),
-        createdAt: new Date()
+        month: selectedMonth,
+        createdAt: new Date(),
       };
 
       if (editingId) {
         // Update existing expense
         await updateExpense(user.uid, editingId, expenseData);
-        setExpenses(expenses.map(expense => 
-          expense.id === editingId 
-            ? { ...expense, ...expenseData }
-            : expense
-        ));
-        Alert.alert('Success', 'Expense updated successfully!');
+        setExpenses(
+          expenses.map((expense) =>
+            expense.id === editingId ? { ...expense, ...expenseData } : expense,
+          ),
+        );
+        Alert.alert("Success", "Expense updated successfully!");
       } else {
         // Add new expense to database
+        const expenseRef = await addExpense(user.uid, expenseData);
         const newExpense = {
-          id: Date.now().toString(),
-          ...expenseData
+          id: expenseRef.id,
+          ...expenseData,
         };
-        await addExpense(user.uid, expenseData);
         setExpenses([...expenses, newExpense]);
-        Alert.alert('Success', 'Expense added successfully!');
+        Alert.alert("Success", "Expense added successfully!");
       }
 
       clearForm();
     } catch (error) {
-      console.error('Error saving expense:', error);
-      Alert.alert('Error', 'Failed to save expense');
+      console.error("Error saving expense:", error);
+      Alert.alert("Error", "Failed to save expense");
     } finally {
       setLoading(false);
     }
@@ -177,52 +197,77 @@ const AddExpenseScreen = ({ navigation }) => {
   // Delete expense
   const handleDeleteExpense = (id) => {
     Alert.alert(
-      'Delete Expense',
-      'Are you sure you want to delete this expense?',
+      "Delete Expense",
+      "Are you sure you want to delete this expense?",
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Delete',
-          style: 'destructive',
+          text: "Delete",
+          style: "destructive",
           onPress: async () => {
             try {
               await deleteExpense(user.uid, id);
-              setExpenses(expenses.filter(expense => expense.id !== id));
+              setExpenses(expenses.filter((expense) => expense.id !== id));
               if (editingId === id) {
                 clearForm();
               }
-              Alert.alert('Success', 'Expense deleted successfully!');
+              Alert.alert("Success", "Expense deleted successfully!");
             } catch (error) {
-              console.error('Error deleting expense:', error);
-              Alert.alert('Error', 'Failed to delete expense');
+              console.error("Error deleting expense:", error);
+              Alert.alert("Error", "Failed to delete expense");
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
   // Render dropdown item
   const renderDropdownItem = ({ item }) => (
     <TouchableOpacity
-      style={[styles.dropdownItem, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+      style={[
+        styles.dropdownItem,
+        {
+          backgroundColor: theme.colors.card,
+          borderColor: theme.colors.border,
+        },
+      ]}
       onPress={() => selectCategory(item)}
     >
-      <Text style={[styles.dropdownItemText, { color: theme.colors.text }]}>{item}</Text>
+      <Text style={[styles.dropdownItemText, { color: theme.colors.text }]}>
+        {item}
+      </Text>
     </TouchableOpacity>
   );
 
   // Render expense item
   const renderExpenseItem = ({ item: expense }) => {
     const allocationPercentage = calculateAllocation(expense.amount);
-    
+
     return (
-      <View style={[styles.expenseItem, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+      <View
+        style={[
+          styles.expenseItem,
+          {
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+          },
+        ]}
+      >
         <View style={styles.expenseInfo}>
-          <Text style={[styles.expenseCategory, { color: theme.colors.text }]}>{expense.category}</Text>
-          <Text style={[styles.expenseAmount, { color: theme.colors.text }]}>KES {expense.amount.toLocaleString()}</Text>
+          <Text style={[styles.expenseCategory, { color: theme.colors.text }]}>
+            {expense.category}
+          </Text>
+          <Text style={[styles.expenseAmount, { color: theme.colors.text }]}>
+            KES {expense.amount.toLocaleString()}
+          </Text>
           {parseFloat(allocationPercentage) > 0 && (
-            <Text style={[styles.expenseAllocation, { color: theme.colors.textSecondary }]}>
+            <Text
+              style={[
+                styles.expenseAllocation,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
               {allocationPercentage}% allocation
             </Text>
           )}
@@ -232,7 +277,11 @@ const AddExpenseScreen = ({ navigation }) => {
             style={[styles.actionButton, { borderColor: theme.colors.border }]}
             onPress={() => editExpense(expense)}
           >
-            <Ionicons name="create-outline" size={16} color={theme.colors.tabBarActive} />
+            <Ionicons
+              name="create-outline"
+              size={16}
+              color={theme.colors.tabBarActive}
+            />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionButton, { borderColor: theme.colors.border }]}
@@ -246,54 +295,106 @@ const AddExpenseScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: theme.colors.background, paddingTop: insets.top },
+      ]}
+    >
       <StatusBar style="auto" />
-      
+
       {/* Header */}
-      <View style={[styles.headerContainer, { borderBottomColor: theme.colors.border }]}>
+      <View
+        style={[
+          styles.headerContainer,
+          { borderBottomColor: theme.colors.border },
+        ]}
+      >
         <TouchableOpacity
           style={[styles.backButton, { borderColor: theme.colors.border }]}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="chevron-back" size={20} color={theme.colors.tabBarActive} />
+          <Ionicons
+            name="chevron-back"
+            size={20}
+            color={theme.colors.tabBarActive}
+          />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Add Expense</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+          Add Expense
+        </Text>
         <View style={styles.placeholder} />
       </View>
 
       <FlatList
         style={[styles.scrollContainer, { flex: 1 }]}
-        data={[{ key: 'content' }]}
+        data={[{ key: "content" }]}
         renderItem={() => (
           <View>
-            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
+            <Text
+              style={[styles.subtitle, { color: theme.colors.textSecondary }]}
+            >
               Add expense categories with allocated amounts
             </Text>
-            
+
             {/* Add Expense Form */}
-            <View style={[styles.formContainer, { backgroundColor: theme.colors.card }]}>
+            <View
+              style={[
+                styles.formContainer,
+                { backgroundColor: theme.colors.card },
+              ]}
+            >
               {/* Allocated Amount Indicator */}
-              <View style={[styles.allocatedAmountContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                <Text style={[styles.allocatedAmountLabel, { color: theme.colors.textSecondary }]}>Expense Allocation</Text>
-                <Text style={[styles.allocatedAmountValue, { color: theme.colors.text }]}>
-                  KES {allocatedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <View
+                style={[
+                  styles.allocatedAmountContainer,
+                  {
+                    backgroundColor: theme.colors.background,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.allocatedAmountLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Expense Allocation
+                </Text>
+                <Text
+                  style={[
+                    styles.allocatedAmountValue,
+                    { color: theme.colors.text },
+                  ]}
+                >
+                  KES{" "}
+                  {allocatedAmount.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
                 </Text>
               </View>
 
               <Text style={[styles.formTitle, { color: theme.colors.text }]}>
-                {editingId ? 'Edit Expense Category' : 'Add Expense Category'}
+                {editingId ? "Edit Expense Category" : "Add Expense Category"}
               </Text>
-              
+
               <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.colors.text }]}>Category:</Text>
+                <Text style={[styles.label, { color: theme.colors.text }]}>
+                  Category:
+                </Text>
                 <View style={styles.inputWithDropdown}>
                   <TextInput
-                    style={[styles.input, { 
-                      backgroundColor: theme.colors.background, 
-                      borderColor: theme.colors.border, 
-                      color: theme.colors.text,
-                      borderTopRightRadius: showDropdown ? 0 : 8
-                    }]}
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.border,
+                        color: theme.colors.text,
+                        borderTopRightRadius: showDropdown ? 0 : 8,
+                      },
+                    ]}
                     placeholder="Type category name..."
                     placeholderTextColor={theme.colors.textSecondary}
                     value={category}
@@ -308,12 +409,17 @@ const AddExpenseScreen = ({ navigation }) => {
                     }}
                   />
                   {showDropdown && (
-                    <View style={[styles.dropdownContainer, { 
-                      backgroundColor: theme.colors.card, 
-                      borderColor: theme.colors.border,
-                      borderTopWidth: 0,
-                      borderTopRightRadius: 0
-                    }]}>
+                    <View
+                      style={[
+                        styles.dropdownContainer,
+                        {
+                          backgroundColor: theme.colors.card,
+                          borderColor: theme.colors.border,
+                          borderTopWidth: 0,
+                          borderTopRightRadius: 0,
+                        },
+                      ]}
+                    >
                       <FlatList
                         data={filteredCategories}
                         renderItem={renderDropdownItem}
@@ -327,18 +433,40 @@ const AddExpenseScreen = ({ navigation }) => {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.colors.text }]}>Amount:</Text>
+                <Text style={[styles.label, { color: theme.colors.text }]}>
+                  Amount:
+                </Text>
                 <View style={styles.amountAllocationRow}>
                   <TextInput
-                    style={[styles.amountInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                    style={[
+                      styles.amountInput,
+                      {
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.border,
+                        color: theme.colors.text,
+                      },
+                    ]}
                     placeholder="0.00"
                     placeholderTextColor={theme.colors.textSecondary}
                     keyboardType="numeric"
                     value={amount}
                     onChangeText={setAmount}
                   />
-                  <View style={[styles.allocationDisplay, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                    <Text style={[styles.allocationText, { color: theme.colors.textSecondary }]}>
+                  <View
+                    style={[
+                      styles.allocationDisplay,
+                      {
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.allocationText,
+                        { color: theme.colors.textSecondary },
+                      ]}
+                    >
                       {calculateAllocation(amount)}%
                     </Text>
                   </View>
@@ -347,18 +475,35 @@ const AddExpenseScreen = ({ navigation }) => {
 
               <View style={styles.buttonRow}>
                 <TouchableOpacity
-                  style={[styles.cancelButton, { borderColor: theme.colors.border }]}
+                  style={[
+                    styles.cancelButton,
+                    { borderColor: theme.colors.border },
+                  ]}
                   onPress={clearForm}
                 >
-                  <Text style={[styles.cancelButtonText, { color: theme.colors.text }]}>Clear</Text>
+                  <Text
+                    style={[
+                      styles.cancelButtonText,
+                      { color: theme.colors.text },
+                    ]}
+                  >
+                    Clear
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.addButton, { backgroundColor: loading ? theme.colors.textSecondary : theme.colors.tabBarActive }]}
+                  style={[
+                    styles.addButton,
+                    {
+                      backgroundColor: loading
+                        ? theme.colors.textSecondary
+                        : theme.colors.tabBarActive,
+                    },
+                  ]}
                   onPress={handleAddExpense}
                   disabled={loading}
                 >
                   <Text style={styles.addButtonText}>
-                    {loading ? 'Saving...' : (editingId ? 'Update' : 'Add')}
+                    {loading ? "Saving..." : editingId ? "Update" : "Add"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -368,14 +513,21 @@ const AddExpenseScreen = ({ navigation }) => {
             {expenses.length > 0 && (
               <View style={styles.listContainer}>
                 <View style={styles.listHeader}>
-                  <Text style={[styles.listTitle, { color: theme.colors.text }]}>
+                  <Text
+                    style={[styles.listTitle, { color: theme.colors.text }]}
+                  >
                     Your Expenses ({expenses.length})
                   </Text>
-                  <Text style={[styles.totalAmount, { color: theme.colors.text }]}>
-                    Total: KES {expenses.reduce((sum, expense) => sum + expense.amount, 0).toLocaleString()}
+                  <Text
+                    style={[styles.totalAmount, { color: theme.colors.text }]}
+                  >
+                    Total: KES{" "}
+                    {expenses
+                      .reduce((sum, expense) => sum + expense.amount, 0)
+                      .toLocaleString()}
                   </Text>
                 </View>
-                
+
                 <FlatList
                   data={expenses}
                   renderItem={renderExpenseItem}
@@ -386,7 +538,7 @@ const AddExpenseScreen = ({ navigation }) => {
             )}
           </View>
         )}
-        keyExtractor={() => 'main-content'}
+        keyExtractor={() => "main-content"}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16 }}
       />
@@ -399,8 +551,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
@@ -411,15 +563,15 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: 16,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     flex: 1,
-    textAlign: 'center',
+    textAlign: "center",
   },
   placeholder: {
     width: 40,
@@ -430,22 +582,22 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     marginBottom: 20,
-    textAlign: 'center',
+    textAlign: "center",
   },
   formContainer: {
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
   },
   allocatedAmountContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
@@ -453,28 +605,28 @@ const styles = StyleSheet.create({
   },
   allocatedAmountLabel: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   allocatedAmountValue: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   formTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   inputGroup: {
     marginBottom: 12,
   },
   label: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 6,
   },
   inputWithDropdown: {
-    position: 'relative',
+    position: "relative",
   },
   input: {
     borderWidth: 1,
@@ -485,9 +637,9 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   amountAllocationRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
-    alignItems: 'stretch',
+    alignItems: "stretch",
   },
   amountInput: {
     flex: 2,
@@ -503,17 +655,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     minHeight: 48,
   },
   allocationText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   dropdownContainer: {
-    position: 'absolute',
-    top: '100%',
+    position: "absolute",
+    top: "100%",
     left: 0,
     right: 0,
     borderWidth: 1,
@@ -522,7 +674,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 8,
     zIndex: 1000,
     elevation: 5,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -535,7 +687,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   buttonRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
     marginTop: 16,
   },
@@ -544,44 +696,44 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   cancelButtonText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   addButton: {
     flex: 2,
     padding: 12,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
   },
   addButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   listContainer: {
     marginTop: 20,
   },
   listHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
     paddingHorizontal: 4,
   },
   listTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   totalAmount: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   expenseItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 8,
     borderRadius: 8,
     borderWidth: 1,
@@ -592,19 +744,19 @@ const styles = StyleSheet.create({
   },
   expenseCategory: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 4,
   },
   expenseAmount: {
     fontSize: 13,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 2,
   },
   expenseAllocation: {
     fontSize: 12,
   },
   expenseActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
   },
   actionButton: {
@@ -612,8 +764,8 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 

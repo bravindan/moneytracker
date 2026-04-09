@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,23 +9,30 @@ import {
   FlatList,
   Alert,
   Share,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../contexts/ThemeContext';
-import { getCurrentUser } from '../services/authService';
-import { getInvestments, getMonthlySummary } from '../services/firestoreService';
-import { Table, Row, Rows } from 'react-native-table-component';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../contexts/ThemeContext";
+import { getCurrentUser } from "../services/authService";
+import {
+  getInvestments,
+  getMonthlySummary,
+} from "../services/firestoreService";
+import { Table, Row, Rows } from "react-native-table-component";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 
-const InvestmentsDetailScreen = ({ navigation }) => {
+const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
+
+const InvestmentsDetailScreen = ({ navigation, route }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const [investments, setInvestments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [allocatedAmount, setAllocatedAmount] = useState(0);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM format
+  const [selectedMonth, setSelectedMonth] = useState(
+    route?.params?.selectedMonth || getCurrentMonth(),
+  ); // YYYY-MM format
 
   const user = getCurrentUser();
   const uid = user?.uid;
@@ -35,32 +42,43 @@ const InvestmentsDetailScreen = ({ navigation }) => {
       loadInvestments();
       loadMonthlyData();
     }
-  }, [uid]);
+  }, [uid, selectedMonth]);
 
   const loadMonthlyData = async () => {
     try {
       const monthlyData = await getMonthlySummary(uid, selectedMonth);
       // Use same calculation as dashboard: savingsAmount + investmentAmount
-      const savingsInvestments = (monthlyData?.savingsAmount || 0) + (monthlyData?.investmentAmount || 0);
+      const savingsInvestments =
+        (monthlyData?.savingsAmount || 0) +
+        (monthlyData?.investmentAmount || 0);
       setAllocatedAmount(savingsInvestments);
     } catch (error) {
-      console.error('Failed to load monthly data:', error);
+      console.error("Failed to load monthly data:", error);
       setAllocatedAmount(0);
     }
   };
 
   const loadInvestments = async () => {
     try {
-      const data = await getInvestments(uid);
+      const data = await getInvestments(uid, selectedMonth);
       setInvestments(data || []);
     } catch (error) {
-      console.error('Failed to load investments:', error);
+      console.error("Failed to load investments:", error);
     } finally {
       setLoading(false);
     }
   };
 
   const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
+  const totalTransactionCosts = investments.reduce(
+    (sum, inv) => sum + (inv.transactionCosts || 0),
+    0,
+  );
+  const totalOutlay = investments.reduce(
+    (sum, inv) =>
+      sum + (inv.totalInvestment || inv.amount + (inv.transactionCosts || 0)),
+    0,
+  );
 
   const getInvestmentPercentage = (amount) => {
     if (allocatedAmount <= 0) return 0;
@@ -70,15 +88,21 @@ const InvestmentsDetailScreen = ({ navigation }) => {
   const generatePDF = async () => {
     try {
       const formatDate = (dateString) => {
-        if (!dateString) return 'N/A';
-        const date = dateString.toDate ? dateString.toDate() : new Date(dateString);
-        return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        if (!dateString) return "N/A";
+        const date = dateString.toDate
+          ? dateString.toDate()
+          : new Date(dateString);
+        return date.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
       };
 
-      const currentDate = new Date().toLocaleDateString('en-GB', { 
-        day: '2-digit', 
-        month: 'long', 
-        year: 'numeric' 
+      const currentDate = new Date().toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
       });
 
       // Generate HTML for PDF
@@ -114,6 +138,14 @@ const InvestmentsDetailScreen = ({ navigation }) => {
               <span class="summary-value">KES ${totalInvested.toLocaleString()}</span>
             </div>
             <div class="summary-row">
+              <span class="summary-label">Transaction Costs:</span>
+              <span class="summary-value">KES ${totalTransactionCosts.toLocaleString()}</span>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Total Outlay:</span>
+              <span class="summary-value">KES ${totalOutlay.toLocaleString()}</span>
+            </div>
+            <div class="summary-row">
               <span class="summary-label">Allocated Amount:</span>
               <span class="summary-value">KES ${allocatedAmount.toLocaleString()}</span>
             </div>
@@ -123,11 +155,11 @@ const InvestmentsDetailScreen = ({ navigation }) => {
             </div>
             <div class="summary-row">
               <span class="summary-label">Remaining:</span>
-              <span class="summary-value">KES ${Math.max(0, allocatedAmount - totalInvested).toLocaleString()}</span>
+              <span class="summary-value">KES ${Math.max(0, allocatedAmount - totalOutlay).toLocaleString()}</span>
             </div>
             <div class="summary-row">
               <span class="summary-label">Investment Rate:</span>
-              <span class="summary-value">${allocatedAmount > 0 ? Math.round((totalInvested / allocatedAmount) * 100) : 0}%</span>
+              <span class="summary-value">${allocatedAmount > 0 ? Math.round((totalOutlay / allocatedAmount) * 100) : 0}%</span>
             </div>
           </div>
           
@@ -138,23 +170,30 @@ const InvestmentsDetailScreen = ({ navigation }) => {
                 <th>Category</th>
                 <th>Platform</th>
                 <th>Amount (KES)</th>
+                <th>Cost (KES)</th>
                 <th>Date</th>
                 <th>% of Allocated</th>
               </tr>
             </thead>
             <tbody>
-              ${investments.map((investment) => {
-                const percentage = getInvestmentPercentage(investment.amount);
-                return `
+              ${investments
+                .map((investment) => {
+                  const totalInvestment =
+                    investment.totalInvestment ||
+                    investment.amount + (investment.transactionCosts || 0);
+                  const percentage = getInvestmentPercentage(totalInvestment);
+                  return `
                   <tr>
-                    <td>${investment.category || 'N/A'}</td>
-                    <td>${investment.platform || 'N/A'}</td>
+                    <td>${investment.category || "N/A"}</td>
+                    <td>${investment.platform || "N/A"}</td>
                     <td>KES ${investment.amount.toLocaleString()}</td>
+                    <td>KES ${(investment.transactionCosts || 0).toLocaleString()}</td>
                     <td>${formatDate(investment.createdAt)}</td>
                     <td>${percentage}%</td>
                   </tr>
                 `;
-              }).join('')}
+                })
+                .join("")}
             </tbody>
           </table>
           
@@ -174,128 +213,255 @@ const InvestmentsDetailScreen = ({ navigation }) => {
       // Share the PDF
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: 'Investment Summary PDF',
-          UTI: 'com.adobe.pdf',
+          mimeType: "application/pdf",
+          dialogTitle: "Investment Summary PDF",
+          UTI: "com.adobe.pdf",
         });
       } else {
-        Alert.alert('Success', `PDF saved to: ${uri}`);
+        Alert.alert("Success", `PDF saved to: ${uri}`);
       }
-
     } catch (error) {
-      console.error('Error generating PDF:', error);
-      Alert.alert('Error', 'Failed to generate PDF. Please try again.');
+      console.error("Error generating PDF:", error);
+      Alert.alert("Error", "Failed to generate PDF. Please try again.");
     }
   };
 
   // Prepare table data
-  const tableHead = ['Category', 'Platform', 'Amount (KES)', 'Date'];
-  
+  const tableHead = [
+    "Category",
+    "Platform",
+    "Amount (KES)",
+    "Cost (KES)",
+    "Date",
+  ];
+
   const tableData = investments.map((investment) => {
     const formatDate = (dateString) => {
-      if (!dateString) return 'N/A';
+      if (!dateString) return "N/A";
       // Handle Firebase timestamp or ISO string
-      const date = dateString.toDate ? dateString.toDate() : new Date(dateString);
-      return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const date = dateString.toDate
+        ? dateString.toDate()
+        : new Date(dateString);
+      return date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
     };
 
     return [
-      investment.category || '',
-      investment.platform || '',
+      investment.category || "",
+      investment.platform || "",
       investment.amount.toLocaleString(),
-      formatDate(investment.createdAt)
+      (investment.transactionCosts || 0).toLocaleString(),
+      formatDate(investment.createdAt),
     ];
   });
 
   if (loading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
-        <Text style={{ color: theme.colors.textSecondary }}>Loading investments...</Text>
+      <View
+        style={[
+          styles.loadingContainer,
+          { backgroundColor: theme.colors.background, paddingTop: insets.top },
+        ]}
+      >
+        <Text style={{ color: theme.colors.textSecondary }}>
+          Loading investments...
+        </Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: theme.colors.background, paddingTop: insets.top },
+      ]}
+    >
       <StatusBar style="auto" />
-      
+
       {/* Header */}
       <View style={styles.headerContainer}>
         <TouchableOpacity
           style={[styles.backButton, { borderColor: theme.colors.border }]}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="chevron-back" size={20} color={theme.colors.tabBarActive} />
+          <Ionicons
+            name="chevron-back"
+            size={20}
+            color={theme.colors.tabBarActive}
+          />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Investment Summary</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+          Investment Summary
+        </Text>
         <TouchableOpacity
           style={[styles.pdfButton, { borderColor: theme.colors.border }]}
           onPress={generatePDF}
         >
-          <Ionicons name="document-text-outline" size={20} color={theme.colors.tabBarActive} />
+          <Ionicons
+            name="document-text-outline"
+            size={20}
+            color={theme.colors.tabBarActive}
+          />
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* Summary */}
-        <View style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}>
-          <Text style={[styles.summaryTitle, { color: theme.colors.textSecondary }]}>Investment Summary</Text>
+        <View
+          style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}
+        >
+          <Text
+            style={[styles.summaryTitle, { color: theme.colors.textSecondary }]}
+          >
+            Investment Summary
+          </Text>
           <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Total Invested:</Text>
+            <Text
+              style={[
+                styles.summaryLabel,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              Total Invested:
+            </Text>
             <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
               KES {totalInvested.toLocaleString()}
             </Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Allocated Amount:</Text>
+            <Text
+              style={[
+                styles.summaryLabel,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              Transaction Costs:
+            </Text>
+            <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
+              KES {totalTransactionCosts.toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text
+              style={[
+                styles.summaryLabel,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              Total Outlay:
+            </Text>
+            <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
+              KES {totalOutlay.toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text
+              style={[
+                styles.summaryLabel,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              Allocated Amount:
+            </Text>
             <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
               KES {allocatedAmount.toLocaleString()}
             </Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Number of Investments:</Text>
+            <Text
+              style={[
+                styles.summaryLabel,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              Number of Investments:
+            </Text>
             <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
               {investments.length}
             </Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Remaining:</Text>
+            <Text
+              style={[
+                styles.summaryLabel,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              Remaining:
+            </Text>
             <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-              KES {Math.max(0, allocatedAmount - totalInvested).toLocaleString()}
+              KES{" "}
+              {Math.max(0, allocatedAmount - totalInvested).toLocaleString()}
             </Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Investment Rate:</Text>
+            <Text
+              style={[
+                styles.summaryLabel,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              Investment Rate:
+            </Text>
             <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-              {allocatedAmount > 0 ? Math.round((totalInvested / allocatedAmount) * 100) : 0}%
+              {allocatedAmount > 0
+                ? Math.round((totalOutlay / allocatedAmount) * 100)
+                : 0}
+              %
             </Text>
           </View>
         </View>
 
         {/* Investments */}
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Investment Platforms</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+          Investment Platforms
+        </Text>
         {investments.length > 0 ? (
           <View style={styles.tableContainer}>
-            <Table borderStyle={{ borderWidth: 1, borderColor: '#e5e7eb' }}>
+            <Table borderStyle={{ borderWidth: 1, borderColor: "#e5e7eb" }}>
               <Row
                 data={tableHead}
-                style={[styles.tableHead, { backgroundColor: theme.colors.card }]}
-                textStyle={[styles.headText, { color: theme.colors.textSecondary }]}
+                style={[
+                  styles.tableHead,
+                  { backgroundColor: theme.colors.card },
+                ]}
+                textStyle={[
+                  styles.headText,
+                  { color: theme.colors.textSecondary },
+                ]}
               />
               <Rows
                 data={tableData}
-                style={[styles.tableRow, { backgroundColor: theme.colors.card }]}
+                style={[
+                  styles.tableRow,
+                  { backgroundColor: theme.colors.card },
+                ]}
                 textStyle={[styles.rowText, { color: theme.colors.text }]}
               />
             </Table>
           </View>
         ) : (
           <View style={styles.emptyContainer}>
-            <Ionicons name="wallet-outline" size={48} color={theme.colors.textSecondary} />
-            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
+            <Ionicons
+              name="wallet-outline"
+              size={48}
+              color={theme.colors.textSecondary}
+            />
+            <Text
+              style={[styles.emptyText, { color: theme.colors.textSecondary }]}
+            >
               No investments yet
             </Text>
-            <Text style={[styles.emptySubtext, { color: theme.colors.textSecondary }]}>
+            <Text
+              style={[
+                styles.emptySubtext,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
               Start by adding your first investment
             </Text>
           </View>
@@ -308,43 +474,43 @@ const InvestmentsDetailScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   container: {
     flex: 1,
   },
   headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: "#e5e7eb",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginRight: 16,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     flex: 1,
-    textAlign: 'center',
+    textAlign: "center",
   },
   pdfButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginLeft: 16,
   },
   scrollContainer: {
@@ -357,26 +523,26 @@ const styles = StyleSheet.create({
   },
   summaryTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 12,
   },
   summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 8,
   },
   summaryLabel: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   summaryValue: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 16,
   },
   listContainer: {
@@ -385,41 +551,41 @@ const styles = StyleSheet.create({
   tableContainer: {
     marginTop: 8,
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   tableHead: {
     height: 40,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: "#f1f5f9",
   },
   tableRow: {
     height: 35,
   },
   headText: {
     fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: "600",
+    textAlign: "center",
   },
   rowText: {
     fontSize: 11,
-    textAlign: 'left',
+    textAlign: "left",
     paddingLeft: 8,
   },
   emptyContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 60,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
     marginTop: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   emptySubtext: {
     fontSize: 14,
     marginTop: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
 });
 

@@ -11,18 +11,46 @@ import {
   query,
   where,
   orderBy,
-} from 'firebase/firestore';
-import { db } from '../config/firebase';
+} from "firebase/firestore";
+import { db } from "../config/firebase";
 
 // ---------------------------------------------------------------------------
 // Collection helpers
 // ---------------------------------------------------------------------------
 
-const usersCol = () => collection(db, 'users');
-const transactionsCol = (uid) => collection(db, 'users', uid, 'transactions');
-const budgetsCol = (uid) => collection(db, 'users', uid, 'budgets');
-const investmentsCol = (uid) => collection(db, 'users', uid, 'investments');
-const expensesCol = (uid) => collection(db, 'users', uid, 'expenses');
+const usersCol = () => collection(db, "users");
+const transactionsCol = (uid) => collection(db, "users", uid, "transactions");
+const budgetsCol = (uid) => collection(db, "users", uid, "budgets");
+const investmentsCol = (uid) => collection(db, "users", uid, "investments");
+const expensesCol = (uid) => collection(db, "users", uid, "expenses");
+const spendingCol = (uid) => collection(db, "users", uid, "spending");
+
+const getMonthKeyFromValue = (value) => {
+  if (!value) return null;
+
+  const date = value?.toDate ? value.toDate() : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString().slice(0, 7);
+};
+
+const getRecordMonth = (record) =>
+  record?.month ||
+  getMonthKeyFromValue(record?.date) ||
+  getMonthKeyFromValue(record?.createdAt);
+
+const filterRecordsByMonth = (records, month) => {
+  if (!month) return records;
+  return records.filter((record) => getRecordMonth(record) === month);
+};
+
+const resolveWriteMonth = (data = {}) =>
+  data.month ||
+  getMonthKeyFromValue(data.date) ||
+  getMonthKeyFromValue(data.createdAt) ||
+  new Date().toISOString().slice(0, 7);
 
 // ---------------------------------------------------------------------------
 // User profile
@@ -74,7 +102,7 @@ export const addTransaction = (uid, data) =>
  * @returns {Promise<object[]>}
  */
 export const getTransactions = async (uid) => {
-  const q = query(transactionsCol(uid), orderBy('createdAt', 'desc'));
+  const q = query(transactionsCol(uid), orderBy("createdAt", "desc"));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
@@ -88,8 +116,8 @@ export const getTransactions = async (uid) => {
 export const getTransactionsByType = async (uid, type) => {
   const q = query(
     transactionsCol(uid),
-    where('type', '==', type),
-    orderBy('createdAt', 'desc')
+    where("type", "==", type),
+    orderBy("createdAt", "desc"),
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -123,7 +151,10 @@ export const deleteTransaction = (uid, transactionId) =>
  * @param {{ allocated: number, month: string }} data
  */
 export const setBudget = (uid, category, data) =>
-  setDoc(doc(budgetsCol(uid), category), { ...data, updatedAt: serverTimestamp() });
+  setDoc(doc(budgetsCol(uid), category), {
+    ...data,
+    updatedAt: serverTimestamp(),
+  });
 
 /**
  * Fetch all budgets for a user.
@@ -146,16 +177,21 @@ export const getBudgets = async (uid) => {
  * @returns {Promise<import('firebase/firestore').DocumentReference>}
  */
 export const addInvestment = (uid, data) =>
-  addDoc(investmentsCol(uid), { ...data, createdAt: serverTimestamp() });
+  addDoc(investmentsCol(uid), {
+    ...data,
+    month: resolveWriteMonth(data),
+    createdAt: serverTimestamp(),
+  });
 
 /**
  * Fetch all investments for a user.
  * @param {string} uid
  * @returns {Promise<object[]>}
  */
-export const getInvestments = async (uid) => {
+export const getInvestments = async (uid, month) => {
   const snap = await getDocs(investmentsCol(uid));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return filterRecordsByMonth(records, month);
 };
 
 /**
@@ -186,16 +222,21 @@ export const deleteInvestment = (uid, investmentId) =>
  * @returns {Promise<import('firebase/firestore').DocumentReference>}
  */
 export const addExpense = (uid, data) =>
-  addDoc(expensesCol(uid), { ...data, createdAt: serverTimestamp() });
+  addDoc(expensesCol(uid), {
+    ...data,
+    month: resolveWriteMonth(data),
+    createdAt: serverTimestamp(),
+  });
 
 /**
  * Fetch all expenses for a user.
  * @param {string} uid
  * @returns {Promise<object[]>}
  */
-export const getExpenses = async (uid) => {
+export const getExpenses = async (uid, month) => {
   const snap = await getDocs(expensesCol(uid));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return filterRecordsByMonth(records, month);
 };
 
 /**
@@ -226,9 +267,10 @@ export const deleteExpense = (uid, expenseId) =>
  * @returns {Promise<import('firebase/firestore').DocumentReference>}
  */
 export const addSpending = (uid, data) =>
-  addDoc(collection(db, 'users', uid, 'spending'), { 
-    ...data, 
-    createdAt: serverTimestamp() 
+  addDoc(spendingCol(uid), {
+    ...data,
+    month: resolveWriteMonth(data),
+    createdAt: serverTimestamp(),
   });
 
 /**
@@ -237,7 +279,7 @@ export const addSpending = (uid, data) =>
  * @param {string} spendingId
  */
 export const deleteSpending = (uid, spendingId) =>
-  deleteDoc(doc(collection(db, 'users', uid, 'spending'), spendingId));
+  deleteDoc(doc(spendingCol(uid), spendingId));
 
 /**
  * Update a spending record.
@@ -246,16 +288,17 @@ export const deleteSpending = (uid, spendingId) =>
  * @param {object} updates
  */
 export const updateSpending = (uid, spendingId, updates) =>
-  updateDoc(doc(collection(db, 'users', uid, 'spending'), spendingId), updates);
+  updateDoc(doc(spendingCol(uid), spendingId), updates);
 
 /**
  * Fetch all spending records for a user.
  * @param {string} uid
  * @returns {Promise<object[]>}
  */
-export const getSpending = async (uid) => {
-  const snap = await getDocs(collection(db, 'users', uid, 'spending'));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+export const getSpending = async (uid, month) => {
+  const snap = await getDocs(spendingCol(uid));
+  const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return filterRecordsByMonth(records, month);
 };
 
 /**
@@ -264,42 +307,25 @@ export const getSpending = async (uid) => {
  * @param {string} category
  * @returns {Promise<object[]>}
  */
-export const getSpendingByCategory = async (uid, category) => {
-  try {
-    // Try with index first (will work once index is created)
-    const q = query(
-      collection(db, 'users', uid, 'spending'),
-      where('category', '==', category),
-      orderBy('createdAt', 'desc')
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch (error) {
-    // Check if this is a missing index error
-    if (error.message.includes('The query requires an index')) {
-      console.log('Using fallback method for spending by category query (index not created yet)');
-    } else {
-      console.error('Error fetching spending by category:', error);
-    }
-    
-    // Fallback: Get all spending and filter client-side (less efficient but works)
-    const allSpending = await getSpending(uid);
-    const filteredSpending = allSpending.filter(spending => spending.category === category);
-    
-    // Sort by date descending to match the intended order
-    return filteredSpending.sort((a, b) => {
-      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.date);
-      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.date);
-      return dateB - dateA;
-    });
-  }
+export const getSpendingByCategory = async (uid, category, month) => {
+  const allSpending = await getSpending(uid, month);
+  const filteredSpending = allSpending.filter(
+    (spending) => spending.category === category,
+  );
+
+  return filteredSpending.sort((a, b) => {
+    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.date);
+    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.date);
+    return dateB - dateA;
+  });
 };
 
 // ---------------------------------------------------------------------------
 // Monthly summaries
 // ---------------------------------------------------------------------------
 
-const monthlySummariesCol = (uid) => collection(db, 'users', uid, 'monthlySummaries');
+const monthlySummariesCol = (uid) =>
+  collection(db, "users", uid, "monthlySummaries");
 
 /**
  * Create or overwrite a monthly summary for a specific month.
@@ -309,7 +335,10 @@ const monthlySummariesCol = (uid) => collection(db, 'users', uid, 'monthlySummar
  * @returns {Promise<void>}
  */
 export const setMonthlySummary = (uid, month, data) =>
-  setDoc(doc(monthlySummariesCol(uid), month), { ...data, updatedAt: serverTimestamp() });
+  setDoc(doc(monthlySummariesCol(uid), month), {
+    ...data,
+    updatedAt: serverTimestamp(),
+  });
 
 /**
  * Fetch all monthly summaries for a user, ordered by month descending.
@@ -317,7 +346,7 @@ export const setMonthlySummary = (uid, month, data) =>
  * @returns {Promise<object[]>}
  */
 export const getMonthlySummaries = async (uid) => {
-  const q = query(monthlySummariesCol(uid), orderBy('updatedAt', 'desc'));
+  const q = query(monthlySummariesCol(uid), orderBy("updatedAt", "desc"));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
