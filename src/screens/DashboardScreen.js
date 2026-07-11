@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Modal,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -18,6 +19,7 @@ import {
   getUserProfile,
   getSpending,
   getInvestments,
+  deleteMonthlySummary,
 } from "../services/firestoreService";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
@@ -139,6 +141,39 @@ const styles = StyleSheet.create({
   addRecordButtonText: {
     fontWeight: "600",
     fontSize: 14,
+  },
+  recordMenuButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
+  recordMenu: {
+    position: "absolute",
+    right: 16,
+    minWidth: 180,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  recordMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  recordMenuText: {
+    fontSize: 15,
+    fontWeight: "500",
   },
   contentContainer: {
     paddingHorizontal: 16,
@@ -399,8 +434,10 @@ export default function DashboardScreen({ navigation }) {
   const [showBalanceAmount, setShowBalanceAmount] = useState(false);
   const [showSavingsAmount, setShowSavingsAmount] = useState(false);
   const [showExpenseAmount, setShowExpenseAmount] = useState(false);
+  const [showOtherAllocations, setShowOtherAllocations] = useState(false);
   const [allSpending, setAllSpending] = useState([]);
   const [investments, setInvestments] = useState([]);
+  const [showRecordMenu, setShowRecordMenu] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     if (!uid) return;
@@ -542,6 +579,40 @@ export default function DashboardScreen({ navigation }) {
     setLoading(true);
   };
 
+  const handleEditRecord = () => {
+    setShowRecordMenu(false);
+    navigation.navigate("MonthlyRecord", {
+      month: selectedMonth,
+      editing: true,
+    });
+  };
+
+  const handleDeleteRecord = () => {
+    setShowRecordMenu(false);
+    Alert.alert(
+      "Delete Monthly Record",
+      `Delete the record for ${formatMonthName(selectedMonth)}? This removes the income and allocation for this month. Recorded expenses and investments are not deleted.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (!uid) return;
+            try {
+              await deleteMonthlySummary(uid, selectedMonth);
+              await fetchMonthlyData();
+              Alert.alert("Deleted", "Monthly record deleted.");
+            } catch (error) {
+              console.error("Failed to delete monthly record:", error);
+              Alert.alert("Error", "Failed to delete monthly record");
+            }
+          },
+        },
+      ],
+    );
+  };
+
   if (loading || profileLoading) {
     return (
       <View
@@ -654,7 +725,7 @@ export default function DashboardScreen({ navigation }) {
                   styles.addRecordButton,
                   { backgroundColor: theme.colors.tabBarActive },
                 ]}
-                onPress={() => navigation.navigate("MonthlyRecord")}
+                onPress={() => navigation.navigate("MonthlyRecord", { month: selectedMonth })}
               >
                 <Text style={styles.addRecordButtonText}>+ Add Record</Text>
               </TouchableOpacity>
@@ -700,7 +771,7 @@ export default function DashboardScreen({ navigation }) {
                     paddingVertical: 12,
                   },
                 ]}
-                onPress={() => navigation.navigate("MonthlyRecord")}
+                onPress={() => navigation.navigate("MonthlyRecord", { month: selectedMonth })}
               >
                 <Text style={styles.addRecordButtonText}>
                   Create Monthly Record
@@ -821,9 +892,19 @@ export default function DashboardScreen({ navigation }) {
               styles.addRecordButton,
               { backgroundColor: theme.colors.tabBarActive },
             ]}
-            onPress={() => navigation.navigate("MonthlyRecord")}
+            onPress={() => navigation.navigate("MonthlyRecord", { month: selectedMonth })}
           >
             <Text style={styles.addRecordButtonText}>+ Add Record</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.recordMenuButton, { borderColor: theme.colors.border }]}
+            onPress={() => setShowRecordMenu(true)}
+          >
+            <Ionicons
+              name="ellipsis-vertical"
+              size={18}
+              color={theme.colors.text}
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -877,6 +958,74 @@ export default function DashboardScreen({ navigation }) {
             >
               {showIncomeAmount ? fmt(financialData.income) : "••••••"}
             </Text>
+            {showIncomeAmount &&
+              Array.isArray(monthlyData?.incomeSources) &&
+              monthlyData.incomeSources.length > 1 && (
+                <View
+                  style={{
+                    marginTop: 12,
+                    paddingTop: 12,
+                    borderTopWidth: 1,
+                    borderTopColor: theme.colors.border,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: theme.colors.textSecondary,
+                      marginBottom: 8,
+                      fontWeight: "600",
+                    }}
+                  >
+                    Income Sources:
+                  </Text>
+                  {monthlyData.incomeSources.map((src, idx) => (
+                    <View
+                      key={idx}
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        marginBottom: 4,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          color: theme.colors.text,
+                          flex: 1,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {src.name}
+                      </Text>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            color: theme.colors.text,
+                            fontWeight: "500",
+                          }}
+                        >
+                          {fmt(src.amount || 0)}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: theme.colors.textSecondary,
+                          }}
+                        >
+                          {financialData.income > 0
+                            ? Math.round(
+                                ((src.amount || 0) / financialData.income) * 100,
+                              )
+                            : 0}
+                          %
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
           </View>
 
           {/* ── Savings & Investments Card ── */}
@@ -952,6 +1101,23 @@ export default function DashboardScreen({ navigation }) {
                 ? fmt(financialData.savingsInvestments)
                 : "••••••"}
             </Text>
+            {showSavingsAmount && (
+              <Text
+                style={[
+                  styles.cardSubtitle,
+                  { color: theme.colors.textSecondary },
+                ]}
+              >
+                {financialData.income > 0
+                  ? Math.round(
+                      (financialData.savingsInvestments /
+                        financialData.income) *
+                        100,
+                    )
+                  : 0}
+                % of income
+              </Text>
+            )}
             {investments.length > 0 && (
               <View
                 style={{
@@ -990,15 +1156,34 @@ export default function DashboardScreen({ navigation }) {
                     >
                       {inv.platform} ({inv.category})
                     </Text>
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        color: theme.colors.text,
-                        fontWeight: "500",
-                      }}
-                    >
-                      {showSavingsAmount ? fmt(inv.amount) : "•••"}
-                    </Text>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          color: theme.colors.text,
+                          fontWeight: "500",
+                        }}
+                      >
+                        {showSavingsAmount ? fmt(inv.amount) : "•••"}
+                      </Text>
+                      {showSavingsAmount && (
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: theme.colors.textSecondary,
+                          }}
+                        >
+                          {financialData.savingsInvestments > 0
+                            ? Math.round(
+                                ((inv.amount || 0) /
+                                  financialData.savingsInvestments) *
+                                  100,
+                              )
+                            : 0}
+                          %
+                        </Text>
+                      )}
+                    </View>
                   </View>
                 ))}
                 {investments.length > 3 && (
@@ -1189,6 +1374,85 @@ export default function DashboardScreen({ navigation }) {
               </View>
             </View>
           </View>
+
+          {/* ── Other Allocations (custom categories) ── */}
+          {Array.isArray(monthlyData?.allocations) &&
+            monthlyData.allocations.filter((a) => a.key === "custom").length >
+              0 && (
+              <View
+                style={[styles.cardWhite, { backgroundColor: theme.colors.card }]}
+              >
+                <View style={styles.cardHeader}>
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <Ionicons
+                      name="pricetags-outline"
+                      size={20}
+                      color={theme.colors.text}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text
+                      style={[styles.sectionTitle, { color: theme.colors.text }]}
+                    >
+                      Other Allocations
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.cardToggle,
+                      { borderColor: theme.colors.border },
+                    ]}
+                    onPress={() =>
+                      setShowOtherAllocations(!showOtherAllocations)
+                    }
+                  >
+                    <Ionicons
+                      name={
+                        showOtherAllocations
+                          ? "eye-off-outline"
+                          : "eye-outline"
+                      }
+                      size={16}
+                      color={theme.colors.tabBarActive}
+                    />
+                  </TouchableOpacity>
+                </View>
+                {monthlyData.allocations
+                  .filter((a) => a.key === "custom")
+                  .map((a, idx) => (
+                    <View key={idx} style={styles.summaryRow}>
+                      <Text
+                        style={[
+                          styles.summaryLabel,
+                          { color: theme.colors.textSecondary },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {a.name}
+                      </Text>
+                      <View style={styles.amountWithPercentage}>
+                        <Text
+                          style={[
+                            styles.summaryValue,
+                            { color: theme.colors.text },
+                          ]}
+                        >
+                          {showOtherAllocations ? fmt(a.amount || 0) : "•••••"}
+                        </Text>
+                        {showOtherAllocations && (
+                          <Text
+                            style={[
+                              styles.summaryPercentage,
+                              { color: theme.colors.textSecondary },
+                            ]}
+                          >
+                            ({Math.round(a.percent || 0)}% of income)
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+              </View>
+            )}
 
           {/* ── Balance Card ── */}
           <View
@@ -1432,6 +1696,57 @@ export default function DashboardScreen({ navigation }) {
               })}
             </View>
           </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Monthly Record Actions Menu */}
+      <Modal
+        visible={showRecordMenu}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowRecordMenu(false)}
+      >
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)" }}
+          activeOpacity={1}
+          onPress={() => setShowRecordMenu(false)}
+        >
+          <View
+            style={[
+              styles.recordMenu,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                top: insets.top + 60,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.recordMenuItem}
+              onPress={handleEditRecord}
+            >
+              <Ionicons
+                name="create-outline"
+                size={20}
+                color={theme.colors.text}
+              />
+              <Text style={[styles.recordMenuText, { color: theme.colors.text }]}>
+                Edit Record
+              </Text>
+            </TouchableOpacity>
+            <View
+              style={{ height: 1, backgroundColor: theme.colors.border }}
+            />
+            <TouchableOpacity
+              style={styles.recordMenuItem}
+              onPress={handleDeleteRecord}
+            >
+              <Ionicons name="trash-outline" size={20} color="#ef4444" />
+              <Text style={[styles.recordMenuText, { color: "#ef4444" }]}>
+                Delete Record
+              </Text>
+            </TouchableOpacity>
+          </View>
         </TouchableOpacity>
       </Modal>
     </View>
