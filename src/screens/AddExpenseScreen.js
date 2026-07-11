@@ -8,6 +8,8 @@ import {
   Alert,
   StatusBar,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -326,9 +328,15 @@ const AddExpenseScreen = ({ navigation, route }) => {
         <View style={styles.placeholder} />
       </View>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
       <FlatList
         style={[styles.scrollContainer, { flex: 1 }]}
         data={[{ key: "content" }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         renderItem={() => (
           <View>
             <Text
@@ -540,8 +548,13 @@ const AddExpenseScreen = ({ navigation, route }) => {
         )}
         keyExtractor={() => "main-content"}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16 }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: 16,
+          paddingBottom: insets.bottom + 140,
+        }}
       />
+      </KeyboardAvoidingView>
     </View>
   );
 };

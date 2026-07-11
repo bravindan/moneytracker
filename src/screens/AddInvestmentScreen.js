@@ -9,6 +9,8 @@ import {
   Alert,
   StatusBar,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -348,10 +350,18 @@ const AddInvestmentScreen = ({ navigation, route }) => {
         <View style={styles.placeholder} />
       </View>
 
-      <View style={styles.mainContainer}>
+      <KeyboardAvoidingView
+        style={styles.mainContainer}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
         <ScrollView
-          contentContainerStyle={styles.scrollContainer}
+          contentContainerStyle={[
+            styles.scrollContainer,
+            { paddingBottom: insets.bottom + 140 },
+          ]}
           scrollEnabled={!showCategoryDropdown}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {/* Add Investment Form */}
           <View
@@ -620,7 +630,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
             </View>
           )}
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 };

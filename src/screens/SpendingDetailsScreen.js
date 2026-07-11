@@ -43,6 +43,81 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   const [transactionCosts, setTransactionCosts] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pickerMonthDate, setPickerMonthDate] = useState(new Date());
+
+  // Date picker helpers (mirrors the picker on the expenses detail screen)
+  const handleDateSelect = (selected) => {
+    setDate(selected);
+    setShowDatePicker(false);
+  };
+
+  const showDatePickerModal = () => {
+    setPickerMonthDate(new Date(date.getTime()));
+    setShowDatePicker(true);
+  };
+
+  const changePickerMonth = (direction) => {
+    const newDate = new Date(pickerMonthDate.getTime());
+    newDate.setMonth(newDate.getMonth() + direction);
+    setPickerMonthDate(newDate);
+  };
+
+  const renderCalendar = () => {
+    const year = pickerMonthDate.getFullYear();
+    const month = pickerMonthDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay();
+
+    const days = [];
+    for (let i = 0; i < firstDay; i++) {
+      days.push(
+        <View
+          key={`empty-${i}`}
+          style={{ width: "14.28%", height: 36, marginBottom: 4 }}
+        />,
+      );
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dayDate = new Date(year, month, i);
+      const isSelected = dayDate.toDateString() === date.toDateString();
+      const isToday = dayDate.toDateString() === new Date().toDateString();
+      days.push(
+        <TouchableOpacity
+          key={i}
+          style={[
+            {
+              width: "14.28%",
+              height: 36,
+              justifyContent: "center",
+              alignItems: "center",
+              marginBottom: 4,
+              borderRadius: 18,
+            },
+            isSelected && { backgroundColor: theme.colors.tabBarActive },
+          ]}
+          onPress={() => handleDateSelect(dayDate)}
+        >
+          <Text
+            style={[
+              {
+                fontSize: 14,
+                color: isSelected
+                  ? "#fff"
+                  : isToday
+                    ? theme.colors.tabBarActive
+                    : theme.colors.text,
+              },
+              isToday && { fontWeight: "bold" },
+            ]}
+          >
+            {i}
+          </Text>
+        </TouchableOpacity>,
+      );
+    }
+    return days;
+  };
 
   const handleEditSpending = (spending) => {
     setEditingId(spending.id);
@@ -509,6 +584,40 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
                   onChangeText={setDescription}
                 />
               </View>
+
+              <View style={{ marginBottom: 16 }}>
+                <Text
+                  style={{ marginBottom: 8, color: theme.colors.textSecondary }}
+                >
+                  Date:
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    {
+                      borderWidth: 1,
+                      borderRadius: 8,
+                      padding: 12,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    },
+                    {
+                      backgroundColor: theme.colors.background,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                  onPress={showDatePickerModal}
+                >
+                  <Text style={{ color: theme.colors.text }}>
+                    {date.toLocaleDateString()}
+                  </Text>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={16}
+                    color={theme.colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              </View>
             </ScrollView>
 
             <View
@@ -553,6 +662,144 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Date Picker Modal */}
+      <Modal
+        visible={showDatePicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme.colors.card,
+              marginHorizontal: 20,
+              borderRadius: 16,
+              overflow: "hidden",
+              elevation: 5,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 4,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderBottomColor: theme.colors.border,
+                borderBottomWidth: 1,
+                padding: 16,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "bold",
+                  color: theme.colors.text,
+                }}
+              >
+                Select Date
+              </Text>
+              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ padding: 16 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 16,
+                }}
+              >
+                <TouchableOpacity
+                  onPress={() => changePickerMonth(-1)}
+                  style={{ padding: 8 }}
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={24}
+                    color={theme.colors.text}
+                  />
+                </TouchableOpacity>
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "bold",
+                    color: theme.colors.text,
+                  }}
+                >
+                  {pickerMonthDate.toLocaleString("default", {
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => changePickerMonth(1)}
+                  style={{ padding: 8 }}
+                >
+                  <Ionicons
+                    name="chevron-forward"
+                    size={24}
+                    color={theme.colors.text}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d, i) => (
+                  <Text
+                    key={i}
+                    style={{
+                      width: "14.28%",
+                      textAlign: "center",
+                      marginBottom: 8,
+                      color: theme.colors.textSecondary,
+                      fontWeight: "bold",
+                      fontSize: 12,
+                    }}
+                  >
+                    {d}
+                  </Text>
+                ))}
+                {renderCalendar()}
+              </View>
+
+              <TouchableOpacity
+                style={{
+                  marginTop: 12,
+                  paddingVertical: 12,
+                  alignItems: "center",
+                  backgroundColor: theme.colors.background,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                }}
+                onPress={() => handleDateSelect(new Date())}
+              >
+                <Text style={{ color: theme.colors.text, fontWeight: "500" }}>
+                  Select Today
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </View>
   );
