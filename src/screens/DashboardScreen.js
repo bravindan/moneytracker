@@ -1484,6 +1484,42 @@ export default function DashboardScreen({ navigation }) {
                   color={theme.colors.tabBarActive}
                 />
               </TouchableOpacity>
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    { borderColor: theme.colors.border },
+                  ]}
+                  onPress={() =>
+                    navigation.navigate("ExpensesDetail", {
+                      selectedMonth,
+                    })
+                  }
+                >
+                  <Ionicons
+                    name="add-outline"
+                    size={16}
+                    color={theme.colors.tabBarActive}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    { borderColor: theme.colors.border },
+                  ]}
+                  onPress={() =>
+                    navigation.navigate("ExpensesDetail", {
+                      selectedMonth,
+                    })
+                  }
+                >
+                  <Ionicons
+                    name="chevron-forward-outline"
+                    size={16}
+                    color={theme.colors.tabBarActive}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
             <Text
               style={[styles.cardValue, { color: theme.colors.text }]}

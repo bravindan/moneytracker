@@ -131,15 +131,27 @@ const AddExpenseScreen = ({ navigation, route }) => {
       return;
     }
 
-    // Combine predefined categories with user-created categories from expenses
-    const userCategories = [
-      ...new Set(expenses.map((expense) => (expense.category || "").trim())),
-    ];
-    const allCategories = [...predefinedCategories, ...userCategories];
+    const userCategories = expenses
+      .map((expense) => (expense.category || "").trim())
+      .filter((cat) => cat);
 
-    const filtered = allCategories.filter((cat) =>
-      cat.toLowerCase().includes(trimmed.toLowerCase()),
-    );
+    const seen = new Set();
+    const deduped = [];
+
+    const add = (cat) => {
+      const key = cat.toLowerCase();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        deduped.push(cat);
+      }
+    };
+
+    predefinedCategories.forEach(add);
+    userCategories.forEach(add);
+
+    const query = trimmed.toLowerCase();
+    const filtered = deduped.filter((cat) => cat.toLowerCase().includes(query));
+
     setFilteredCategories(filtered);
     setShowDropdown(true);
   };
@@ -338,7 +350,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
           />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-          Add Expense
+          Expense Categories
         </Text>
         <View style={styles.placeholder} />
       </View>

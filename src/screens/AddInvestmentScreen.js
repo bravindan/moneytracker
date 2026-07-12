@@ -22,6 +22,7 @@ import {
   updateInvestment,
   deleteInvestment,
   getMonthlySummary,
+  getSpending,
 } from "../services/firestoreService";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -55,6 +56,10 @@ const AddInvestmentScreen = ({ navigation, route }) => {
   const user = getCurrentUser();
   const uid = user?.uid;
 
+  const [pendingBalance, setPendingBalance] = useState(0);
+  const [totalSpent, setTotalSpent] = useState(0);
+
+  // Load investments data from database
   useEffect(() => {
     if (uid) {
       loadInvestments();
@@ -65,14 +70,34 @@ const AddInvestmentScreen = ({ navigation, route }) => {
   const loadMonthlyData = async () => {
     try {
       const monthlyData = await getMonthlySummary(uid, selectedMonth);
-      // Use same calculation as dashboard: savingsAmount + investmentAmount
+
+      const income = monthlyData?.income || 0;
+      const expensesAmount = monthlyData?.expensesAmount || 0;
       const savingsInvestments =
         (monthlyData?.savingsAmount || 0) +
         (monthlyData?.investmentAmount || 0);
+
       setAllocatedAmount(savingsInvestments);
+
+      const spending = await getSpending(uid, selectedMonth);
+      const totalCategorySpends = spending.reduce(
+        (sum, s) => sum + (parseFloat(s.amount) || 0),
+        0,
+      );
+
+      const reservedOutlay =
+        (parseFloat(monthlyData?.investmentAmount) || 0) +
+        (parseFloat(monthlyData?.savingsAmount) || 0);
+
+      const balance = income - expensesAmount - reservedOutlay - totalCategorySpends;
+
+      setTotalSpent(totalCategorySpends);
+      setPendingBalance(balance > 0 ? balance : 0);
     } catch (error) {
       console.error("Failed to load monthly data:", error);
       setAllocatedAmount(0);
+      setPendingBalance(0);
+      setTotalSpent(0);
     }
   };
 
@@ -407,6 +432,67 @@ const AddInvestmentScreen = ({ navigation, route }) => {
             <Text style={[styles.formTitle, { color: theme.colors.text }]}>
               {editingId ? "Edit Investment" : "Add New Investment"}
             </Text>
+
+            <View style={styles.summaryRow}>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[
+                    styles.allocatedAmountLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Budgeted
+                </Text>
+                <Text
+                  style={[
+                    styles.allocatedAmountValue,
+                    { color: theme.colors.text },
+                  ]}
+                >
+                  KES {allocatedAmount.toLocaleString()}
+                </Text>
+              </View>
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text
+                  style={[
+                    styles.allocatedAmountLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Outlay
+                </Text>
+                <Text
+                  style={[
+                    styles.allocatedAmountValue,
+                    { color: theme.colors.text },
+                  ]}
+                >
+                  KES {totalOutlay.toLocaleString()}
+                </Text>
+              </View>
+              <View style={{ flex: 1, alignItems: "flex-end" }}>
+                <Text
+                  style={[
+                    styles.allocatedAmountLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Pending
+                </Text>
+                <Text
+                  style={[
+                    styles.allocatedAmountValue,
+                    {
+                      color:
+                        pendingBalance > 0 ? theme.colors.tabBarActive : "#ef4444",
+                      fontWeight: "bold",
+                    },
+                  ]}
+                >
+                  KES {Math.max(pendingBalance - totalOutlay, 0).toLocaleString()}
+                </Text>
+              </View>
+            </View>
 
             <View style={styles.inputGroup}>
               <Text
