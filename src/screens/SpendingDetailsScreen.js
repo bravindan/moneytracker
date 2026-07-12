@@ -435,7 +435,13 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
         onRequestClose={() => setShowAddModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={
+            Platform.OS === "ios"
+              ? "padding"
+              : Platform.OS === "android"
+                ? "height"
+                : undefined
+          }
           style={[
             {
               flex: 1,
