@@ -357,7 +357,7 @@ export const getMonthlySummaries = async (uid) => {
  * @param {string} month - Format "YYYY-MM"
  * @returns {Promise<object|null>}
  */
-const getMonthlySummary = async (uid, month) => {
+export const getMonthlySummary = async (uid, month) => {
   const snap = await getDoc(doc(monthlySummariesCol(uid), month));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 };
