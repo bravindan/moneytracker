@@ -357,9 +357,20 @@ export const getMonthlySummaries = async (uid) => {
  * @param {string} month - Format "YYYY-MM"
  * @returns {Promise<object|null>}
  */
-export const getMonthlySummary = async (uid, month) => {
+const getMonthlySummary = async (uid, month) => {
   const snap = await getDoc(doc(monthlySummariesCol(uid), month));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+};
+
+export const addUnallocatedSpending = async (uid, data) => {
+  const payload = {
+    ...data,
+    category: "Unallocated",
+    isUnallocated: true,
+    month: resolveWriteMonth(data),
+    createdAt: serverTimestamp(),
+  };
+  return addDoc(spendingCol(uid), payload);
 };
 
 /**

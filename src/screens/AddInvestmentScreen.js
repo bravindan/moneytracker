@@ -427,72 +427,73 @@ const AddInvestmentScreen = ({ navigation, route }) => {
               >
                 KES {allocatedAmount.toLocaleString()}
               </Text>
+              <View style={styles.summaryRow}>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.allocatedAmountLabel,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Budgeted
+                  </Text>
+                  <Text
+                    style={[
+                      styles.allocatedAmountValue,
+                      { color: theme.colors.text },
+                    ]}
+                  >
+                    KES {allocatedAmount.toLocaleString()}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, alignItems: "center" }}>
+                  <Text
+                    style={[
+                      styles.allocatedAmountLabel,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Outlay
+                  </Text>
+                  <Text
+                    style={[
+                      styles.allocatedAmountValue,
+                      { color: theme.colors.text },
+                    ]}
+                  >
+                    KES {totalOutlay.toLocaleString()}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, alignItems: "flex-end" }}>
+                  <Text
+                    style={[
+                      styles.allocatedAmountLabel,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Pending
+                  </Text>
+                  <Text
+                    style={[
+                      styles.allocatedAmountValue,
+                      {
+                        color:
+                          pendingBalance > 0
+                            ? theme.colors.tabBarActive
+                            : "#ef4444",
+                        fontWeight: "bold",
+                      },
+                    ]}
+                  >
+                    KES {Math.max(pendingBalance - totalOutlay, 0).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
             </View>
 
             <Text style={[styles.formTitle, { color: theme.colors.text }]}>
               {editingId ? "Edit Investment" : "Add New Investment"}
             </Text>
-
-            <View style={styles.summaryRow}>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[
-                    styles.allocatedAmountLabel,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Budgeted
-                </Text>
-                <Text
-                  style={[
-                    styles.allocatedAmountValue,
-                    { color: theme.colors.text },
-                  ]}
-                >
-                  KES {allocatedAmount.toLocaleString()}
-                </Text>
-              </View>
-              <View style={{ flex: 1, alignItems: "center" }}>
-                <Text
-                  style={[
-                    styles.allocatedAmountLabel,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Outlay
-                </Text>
-                <Text
-                  style={[
-                    styles.allocatedAmountValue,
-                    { color: theme.colors.text },
-                  ]}
-                >
-                  KES {totalOutlay.toLocaleString()}
-                </Text>
-              </View>
-              <View style={{ flex: 1, alignItems: "flex-end" }}>
-                <Text
-                  style={[
-                    styles.allocatedAmountLabel,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Pending
-                </Text>
-                <Text
-                  style={[
-                    styles.allocatedAmountValue,
-                    {
-                      color:
-                        pendingBalance > 0 ? theme.colors.tabBarActive : "#ef4444",
-                      fontWeight: "bold",
-                    },
-                  ]}
-                >
-                  KES {Math.max(pendingBalance - totalOutlay, 0).toLocaleString()}
-                </Text>
-              </View>
-            </View>
 
             <View style={styles.inputGroup}>
               <Text

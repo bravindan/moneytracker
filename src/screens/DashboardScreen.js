@@ -1491,8 +1491,9 @@ export default function DashboardScreen({ navigation }) {
                     { borderColor: theme.colors.border },
                   ]}
                   onPress={() =>
-                    navigation.navigate("ExpensesDetail", {
+                    navigation.navigate("SpendingDetails", {
                       selectedMonth,
+                      category: "Unallocated",
                     })
                   }
                 >
@@ -1508,8 +1509,9 @@ export default function DashboardScreen({ navigation }) {
                     { borderColor: theme.colors.border },
                   ]}
                   onPress={() =>
-                    navigation.navigate("ExpensesDetail", {
+                    navigation.navigate("SpendingDetails", {
                       selectedMonth,
+                      category: "Unallocated",
                     })
                   }
                 >

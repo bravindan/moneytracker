@@ -17,6 +17,9 @@ import {
   deleteSpending,
   updateSpending,
   addSpending,
+  getSpending,
+  updateMonthlySummary,
+  getMonthlySummary,
 } from "../services/firestoreService";
 import {
   Alert,
@@ -32,6 +35,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   const user = getCurrentUser();
 
   const { category, selectedMonth } = route.params || {};
+  const isUnallocated = category === "Unallocated";
 
   // State for spending data
   const [spendingList, setSpendingList] = useState([]);
@@ -217,16 +221,22 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
     );
   };
 
-  // Load spending data for the specific category
+  // Load spending data for the specific category or unallocated spend
   useEffect(() => {
     const loadSpendingData = async () => {
       try {
         setLoading(true);
-        const spendingData = await getSpendingByCategory(
-          user.uid,
-          category,
-          selectedMonth,
-        );
+        let spendingData = [];
+        if (isUnallocated) {
+          const allSpending = await getSpending(user.uid, selectedMonth);
+          spendingData = allSpending.filter((s) => s.isUnallocated);
+        } else if (category) {
+          spendingData = await getSpendingByCategory(
+            user.uid,
+            category,
+            selectedMonth,
+          );
+        }
         setSpendingList(spendingData);
       } catch (error) {
         console.error("Failed to load spending data:", error);
@@ -236,10 +246,10 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
       }
     };
 
-    if (category) {
+    if (isUnallocated || category) {
       loadSpendingData();
     }
-  }, [user.uid, category, selectedMonth]);
+  }, [user.uid, category, selectedMonth, isUnallocated]);
 
   const renderSpendingItem = ({ item: spending }) => (
     <View
