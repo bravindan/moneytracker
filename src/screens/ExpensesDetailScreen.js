@@ -639,7 +639,13 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
         onRequestClose={() => setShowSpendingModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={
+            Platform.OS === "ios"
+              ? "padding"
+              : Platform.OS === "android"
+                ? "height"
+                : undefined
+          }
           style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.5)" }]}
         >
           <View

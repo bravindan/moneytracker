@@ -352,7 +352,13 @@ const AddInvestmentScreen = ({ navigation, route }) => {
 
       <KeyboardAvoidingView
         style={styles.mainContainer}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : Platform.OS === "android"
+              ? "height"
+              : undefined
+        }
       >
         <ScrollView
           contentContainerStyle={[

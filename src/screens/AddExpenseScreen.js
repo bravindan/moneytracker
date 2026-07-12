@@ -10,6 +10,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -51,6 +52,12 @@ const AddExpenseScreen = ({ navigation, route }) => {
     route?.params?.selectedMonth || getCurrentMonth(),
   ); // YYYY-MM format
   const [allocatedAmount, setAllocatedAmount] = useState(0);
+
+  // Month picker state
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(
+    new Date().getFullYear(),
+  );
 
   // Expenses list
   const [expenses, setExpenses] = useState([]);
@@ -330,9 +337,11 @@ const AddExpenseScreen = ({ navigation, route }) => {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={
+          Platform.OS === "ios" ? "padding" : Platform.OS === "android" ? "height" : undefined
+        }
       >
-      <FlatList
+        <FlatList
         style={[styles.scrollContainer, { flex: 1 }]}
         data={[{ key: "content" }]}
         keyboardShouldPersistTaps="handled"
@@ -383,6 +392,42 @@ const AddExpenseScreen = ({ navigation, route }) => {
                   })}
                 </Text>
               </View>
+
+              {/* Month Picker */}
+              <TouchableOpacity
+                style={[
+                  styles.datePickerTrigger,
+                  {
+                    backgroundColor: theme.colors.background,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+                onPress={() => {
+                  setPickerYear(
+                    parseInt(selectedMonth.split("-")[0]),
+                  );
+                  setShowMonthPicker(true);
+                }}
+              >
+                <Ionicons
+                  name="calendar"
+                  size={18}
+                  color={theme.colors.tabBarActive}
+                />
+                <Text
+                  style={[
+                    styles.datePickerText,
+                    { color: theme.colors.text },
+                  ]}
+                >
+                  {selectedMonth}
+                </Text>
+                <Ionicons
+                  name="chevron-down"
+                  size={16}
+                  color={theme.colors.textSecondary}
+                />
+              </TouchableOpacity>
 
               <Text style={[styles.formTitle, { color: theme.colors.text }]}>
                 {editingId ? "Edit Expense Category" : "Add Expense Category"}
@@ -555,6 +600,130 @@ const AddExpenseScreen = ({ navigation, route }) => {
         }}
       />
       </KeyboardAvoidingView>
+
+      {/* Month Picker Modal */}
+      <Modal
+        visible={showMonthPicker}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowMonthPicker(false)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+          activeOpacity={1}
+          onPress={() => setShowMonthPicker(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{
+              width: "80%",
+              padding: 20,
+              backgroundColor: theme.colors.card,
+              borderRadius: 16,
+              shadowColor: "#000",
+              shadowOpacity: 0.25,
+              shadowRadius: 4,
+              elevation: 5,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 20,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => setPickerYear(pickerYear - 1)}
+                style={{ padding: 10 }}
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={24}
+                  color={theme.colors.text}
+                />
+              </TouchableOpacity>
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontWeight: "bold",
+                  color: theme.colors.text,
+                }}
+              >
+                {pickerYear}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setPickerYear(pickerYear + 1)}
+                style={{ padding: 10 }}
+              >
+                <Ionicons
+                  name="chevron-forward"
+                  size={24}
+                  color={theme.colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                justifyContent: "space-between",
+              }}
+            >
+              {Array.from({ length: 12 }).map((_, i) => {
+                const isSelected =
+                  selectedMonth ===
+                  `${pickerYear}-${String(i + 1).padStart(2, "0")}`;
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    style={{
+                      width: "30%",
+                      height: 40,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginBottom: 12,
+                      borderRadius: 8,
+                      backgroundColor: isSelected
+                        ? theme.colors.tabBarActive
+                        : theme.colors.background,
+                    }}
+                    onPress={() => {
+                      if (
+                        selectedMonth !==
+                        `${pickerYear}-${String(i + 1).padStart(2, "0")}`
+                      ) {
+                        setLoading(true);
+                      }
+                      setSelectedMonth(
+                        `${pickerYear}-${String(i + 1).padStart(2, "0")}`,
+                      );
+                      setShowMonthPicker(false);
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: isSelected ? "#fff" : theme.colors.text,
+                        fontWeight: isSelected ? "bold" : "normal",
+                      }}
+                    >
+                      {new Date(2000, i).toLocaleString("default", {
+                        month: "short",
+                      })}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -629,6 +798,22 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 16,
     textAlign: "center",
+  },
+  datePickerTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginBottom: 12,
+    gap: 10,
+    minHeight: 48,
+  },
+  datePickerText: {
+    fontSize: 16,
+    flex: 1,
+    fontWeight: "500",
   },
   inputGroup: {
     marginBottom: 12,
