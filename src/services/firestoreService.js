@@ -83,6 +83,56 @@ export const getUserProfile = async (uid) => {
 export const updateUserProfile = (uid, updates) =>
   updateDoc(doc(usersCol(), uid), { ...updates, updatedAt: serverTimestamp() });
 
+/**
+ * Find a user profile by phone number.
+ * @param {string} phone
+ * @returns {Promise<object|null>}
+ */
+export const getUserByPhone = async (phone) => {
+  const q = query(usersCol(), where("phone", "==", phone));
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  return { id: doc.id, ...doc.data() };
+};
+
+/**
+ * Check if an email is already registered.
+ * @param {string} email
+ * @returns {Promise<boolean>}
+ */
+export const isEmailTaken = async (email) => {
+  const q = query(usersCol(), where("email", "==", email));
+  const snap = await getDocs(q);
+  return !snap.empty;
+};
+
+/**
+ * Delete all data for a user (profile + subcollections).
+ * @param {string} uid
+ * @returns {Promise<void>}
+ */
+export const deleteAllUserData = async (uid) => {
+  const subcollections = [
+    transactionsCol(uid),
+    budgetsCol(uid),
+    investmentsCol(uid),
+    expensesCol(uid),
+    spendingCol(uid),
+  ];
+
+  // Delete all documents in each subcollection
+  for (const col of subcollections) {
+    const snap = await getDocs(col);
+    for (const d of snap.docs) {
+      await deleteDoc(d.ref);
+    }
+  }
+
+  // Delete the user profile document
+  await deleteDoc(doc(usersCol(), uid));
+};
+
 // ---------------------------------------------------------------------------
 // Transactions (income / expenses)
 // ---------------------------------------------------------------------------

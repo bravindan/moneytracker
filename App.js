@@ -23,6 +23,7 @@ import {
 import { subscribeToAuthChanges } from "./src/services/authService";
 import { ThemeProvider, useTheme } from "./src/contexts/ThemeContext";
 import LoginScreen from "./src/screens/LoginScreen";
+import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
 import MonthlyRecordScreen from "./src/screens/MonthlyRecordScreen";
 import SettingsMenuScreen from "./src/screens/SettingsMenuScreen";
@@ -293,6 +294,7 @@ function RootNavigator({ user }) {
             }}
           >
             <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
           </Stack.Navigator>
         )}
       </NavigationContainer>
