@@ -4,22 +4,26 @@ import {
   View,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   RefreshControl,
   Modal,
   Alert,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
+import IOSSpinner from "../components/IOSSpinner";
 import { getCurrentUser, logoutUser } from "../services/authService";
 import {
   getMonthlySummary,
-  getMonthlySummaries,
   getUserProfile,
   getSpending,
   getInvestments,
   deleteMonthlySummary,
+  addSpending,
+  updateUserProfile,
 } from "../services/firestoreService";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
@@ -59,7 +63,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 8,
-    borderBottomWidth: 1,
   },
   stickyHeader: {
     position: "sticky",
@@ -221,12 +224,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  balanceRow: {
-    borderTopWidth: 1,
-    borderTopColor: "transparent",
-    paddingTop: 8,
-    marginTop: 4,
-  },
+  balanceRow: {},
   summaryLabel: {
     fontSize: 14,
     fontWeight: "500",
@@ -239,9 +237,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   summaryPercentage: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
-    marginTop: 2,
   },
   cardGreen: {
     padding: 16,
@@ -277,6 +274,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     flexShrink: 0,
     lineHeight: 24,
+    minHeight: 24,
   },
   cardSubtitle: {
     fontSize: 11,
@@ -438,11 +436,23 @@ export default function DashboardScreen({ navigation }) {
   const [investments, setInvestments] = useState([]);
   const [showRecordMenu, setShowRecordMenu] = useState(false);
 
+  // Auto month switch
+  const [autoMonthSwitch, setAutoMonthSwitch] = useState(true);
+
+  // Unallocated spending modal state
+  const [showUnallocatedModal, setShowUnallocatedModal] = useState(false);
+  const [unallocatedItem, setUnallocatedItem] = useState("");
+  const [unallocatedAmount, setUnallocatedAmount] = useState("");
+  const [unallocatedTxnCost, setUnallocatedTxnCost] = useState("");
+  const [unallocatedDesc, setUnallocatedDesc] = useState("");
+  const [unallocatedDate, setUnallocatedDate] = useState(new Date());
+
   const fetchProfile = useCallback(async () => {
     if (!uid) return;
     try {
       const data = await getUserProfile(uid);
       setProfile(data);
+      if (data?.autoMonthSwitch !== undefined) setAutoMonthSwitch(data.autoMonthSwitch);
     } catch (error) {
       console.error("Failed to fetch profile:", error);
     } finally {
@@ -489,10 +499,15 @@ export default function DashboardScreen({ navigation }) {
     }, [fetchProfile, fetchMonthlyData]),
   );
 
-  // Fetch monthly summary for selected month
+  // Auto-switch to current month when toggle is ON
   useEffect(() => {
-    fetchMonthlyData();
-  }, [fetchMonthlyData]);
+    if (autoMonthSwitch) {
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      if (selectedMonth !== currentMonth) {
+        setSelectedMonth(currentMonth);
+      }
+    }
+  }, [autoMonthSwitch]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -503,24 +518,31 @@ export default function DashboardScreen({ navigation }) {
   const financialData = monthlyData
     ? {
         income: monthlyData.income || 0,
-        balance: monthlyData.balance || 0,
+        balance:
+          (monthlyData.balance || 0) -
+          allSpending
+            .filter((s) => s.category === "Unallocated")
+            .reduce((sum, s) => sum + (s.totalSpending || s.amount || 0), 0),
         savingsInvestments:
-          (monthlyData.savingsAmount || 0) +
           (monthlyData.investmentAmount || 0),
         expenses: {
           allocated: monthlyData.expensesAmount || 0,
-          spent: allSpending.reduce(
-            (sum, spending) =>
-              sum + (spending.totalSpending || spending.amount || 0),
-            0,
-          ),
-          remaining:
-            (monthlyData.expensesAmount || 0) -
-            allSpending.reduce(
+          spent: allSpending
+            .filter((s) => s.category !== "Unallocated")
+            .reduce(
               (sum, spending) =>
                 sum + (spending.totalSpending || spending.amount || 0),
               0,
             ),
+          remaining:
+            (monthlyData.expensesAmount || 0) -
+            allSpending
+              .filter((s) => s.category !== "Unallocated")
+              .reduce(
+                (sum, spending) =>
+                  sum + (spending.totalSpending || spending.amount || 0),
+                0,
+              ),
         },
         expenseBreakdown: [], // we don't have breakdown in monthly summary yet
         investments: [], // we don't have investments in monthly summary yet
@@ -578,6 +600,18 @@ export default function DashboardScreen({ navigation }) {
     setLoading(true);
   };
 
+  const toggleAutoMonthSwitch = async () => {
+    const newValue = !autoMonthSwitch;
+    setAutoMonthSwitch(newValue);
+    if (uid) {
+      try {
+        await updateUserProfile(uid, { autoMonthSwitch: newValue });
+      } catch (e) {
+        console.error("Failed to save setting:", e);
+      }
+    }
+  };
+
   const handleEditRecord = () => {
     setShowRecordMenu(false);
     navigation.navigate("MonthlyRecord", {
@@ -612,6 +646,45 @@ export default function DashboardScreen({ navigation }) {
     );
   };
 
+  const handleSaveUnallocatedSpending = async () => {
+    if (!unallocatedItem.trim()) {
+      Alert.alert("Required", "Please enter an item name.");
+      return;
+    }
+    const amountNum = parseFloat(unallocatedAmount);
+    if (!amountNum || amountNum <= 0) {
+      Alert.alert("Required", "Please enter a valid amount.");
+      return;
+    }
+    const txnCostNum = parseFloat(unallocatedTxnCost) || 0;
+    if (amountNum > financialData.balance) {
+      Alert.alert("Insufficient", "Amount exceeds available balance.");
+      return;
+    }
+    try {
+      await addSpending(uid, {
+        itemName: unallocatedItem.trim(),
+        category: "Unallocated",
+        amount: amountNum,
+        transactionCosts: txnCostNum,
+        totalSpending: amountNum + txnCostNum,
+        description: unallocatedDesc.trim(),
+        date: unallocatedDate,
+      });
+      setShowUnallocatedModal(false);
+      setUnallocatedItem("");
+      setUnallocatedAmount("");
+      setUnallocatedTxnCost("");
+      setUnallocatedDesc("");
+      setUnallocatedDate(new Date());
+      await fetchMonthlyData();
+      Alert.alert("Success", "Spending recorded.");
+    } catch (error) {
+      console.error("Failed to save spending:", error);
+      Alert.alert("Error", "Failed to save spending.");
+    }
+  };
+
   if (loading || profileLoading) {
     return (
       <View
@@ -620,10 +693,7 @@ export default function DashboardScreen({ navigation }) {
           { backgroundColor: theme.colors.background, paddingTop: insets.top },
         ]}
       >
-        <ActivityIndicator size="large" color={theme.colors.tabBarActive} />
-        <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>
-          Loading monthly data...
-        </Text>
+        <IOSSpinner size={40} color={theme.colors.tabBarActive} />
       </View>
     );
   }
@@ -649,7 +719,6 @@ export default function DashboardScreen({ navigation }) {
               styles.headerContainer,
               {
                 backgroundColor: theme.colors.card,
-                borderBottomColor: theme.colors.border,
               },
             ]}
           >
@@ -798,7 +867,6 @@ export default function DashboardScreen({ navigation }) {
           styles.headerContainer,
           {
             backgroundColor: theme.colors.card,
-            borderBottomColor: theme.colors.border,
           },
         ]}
       >
@@ -887,14 +955,55 @@ export default function DashboardScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[
-              styles.addRecordButton,
-              { backgroundColor: theme.colors.tabBarActive },
-            ]}
-            onPress={() => navigation.navigate("MonthlyRecord", { month: selectedMonth })}
+            onPress={toggleAutoMonthSwitch}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginLeft: 8,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 8,
+              backgroundColor: autoMonthSwitch ? theme.colors.tabBarActive + "20" : "transparent",
+            }}
           >
-            <Text style={styles.addRecordButtonText}>+ Add Record</Text>
+            <View
+              style={{
+                width: 36,
+                height: 20,
+                borderRadius: 10,
+                backgroundColor: autoMonthSwitch ? theme.colors.tabBarActive : theme.colors.border,
+                justifyContent: "center",
+                paddingHorizontal: 2,
+              }}
+            >
+              <View
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  backgroundColor: "#fff",
+                  alignSelf: autoMonthSwitch ? "flex-end" : "flex-start",
+                }}
+              />
+            </View>
+            <Ionicons
+              name="sync-outline"
+              size={14}
+              color={autoMonthSwitch ? theme.colors.tabBarActive : theme.colors.textSecondary}
+              style={{ marginLeft: 4 }}
+            />
           </TouchableOpacity>
+          {!monthlyData && (
+            <TouchableOpacity
+              style={[
+                styles.addRecordButton,
+                { backgroundColor: theme.colors.tabBarActive },
+              ]}
+              onPress={() => navigation.navigate("MonthlyRecord", { month: selectedMonth })}
+            >
+              <Text style={styles.addRecordButtonText}>+ Add Record</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.recordMenuButton, { borderColor: theme.colors.border }]}
             onPress={() => setShowRecordMenu(true)}
@@ -906,6 +1015,18 @@ export default function DashboardScreen({ navigation }) {
             />
           </TouchableOpacity>
         </View>
+        <Text
+          style={{
+            fontSize: 11,
+            color: theme.colors.textSecondary,
+            textAlign: "center",
+            marginTop: 4,
+          }}
+        >
+          {autoMonthSwitch
+            ? "Auto-switch ON — app opens to current month"
+            : "Auto-switch OFF — stays on selected month"}
+        </Text>
       </View>
 
       {/* Scrollable Content */}
@@ -957,9 +1078,8 @@ export default function DashboardScreen({ navigation }) {
             >
               {showIncomeAmount ? fmt(financialData.income) : "••••••"}
             </Text>
-            {showIncomeAmount &&
-              Array.isArray(monthlyData?.incomeSources) &&
-              monthlyData.incomeSources.length > 1 && (
+            {Array.isArray(monthlyData?.incomeSources) &&
+              monthlyData.incomeSources.length > 0 && (
                 <View
                   style={{
                     marginTop: 12,
@@ -978,26 +1098,34 @@ export default function DashboardScreen({ navigation }) {
                   >
                     Income Sources:
                   </Text>
-                  {monthlyData.incomeSources.map((src, idx) => (
-                    <View
-                      key={idx}
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        marginBottom: 4,
-                      }}
-                    >
-                      <Text
+                  {monthlyData.incomeSources.map((src, idx) => {
+                    const pct =
+                      financialData.income > 0
+                        ? Math.round(((src.amount || 0) / financialData.income) * 100)
+                        : 0;
+                    return (
+                      <View
+                        key={idx}
                         style={{
-                          fontSize: 13,
-                          color: theme.colors.text,
-                          flex: 1,
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: 6,
                         }}
-                        numberOfLines={1}
                       >
-                        {src.name}
-                      </Text>
-                      <View style={{ alignItems: "flex-end" }}>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            color: theme.colors.text,
+                            flex: 1,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {src.name}
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 11, visibility: showIncomeAmount ? 'visible' : 'hidden' }}>
+                            {" "}({pct}%)
+                          </Text>
+                        </Text>
                         <Text
                           style={{
                             fontSize: 13,
@@ -1005,24 +1133,11 @@ export default function DashboardScreen({ navigation }) {
                             fontWeight: "500",
                           }}
                         >
-                          {fmt(src.amount || 0)}
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: theme.colors.textSecondary,
-                          }}
-                        >
-                          {financialData.income > 0
-                            ? Math.round(
-                                ((src.amount || 0) / financialData.income) * 100,
-                              )
-                            : 0}
-                          %
+                          {showIncomeAmount ? fmt(src.amount || 0) : "••••••"}
                         </Text>
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
           </View>
@@ -1091,113 +1206,95 @@ export default function DashboardScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             </View>
-            <Text
-              style={[styles.cardValue, { color: theme.colors.text }]}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >
-              {showSavingsAmount
-                ? fmt(financialData.savingsInvestments)
-                : "••••••"}
-            </Text>
-            {showSavingsAmount && (
-              <Text
-                style={[
-                  styles.cardSubtitle,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                {financialData.income > 0
-                  ? Math.round(
-                      (financialData.savingsInvestments /
-                        financialData.income) *
-                        100,
-                    )
-                  : 0}
-                % of income
-              </Text>
-            )}
-            {investments.length > 0 && (
-              <View
-                style={{
-                  marginTop: 12,
-                  paddingTop: 12,
-                  borderTopWidth: 1,
-                  borderTopColor: theme.colors.border,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: theme.colors.textSecondary,
-                    marginBottom: 8,
-                    fontWeight: "600",
-                  }}
-                >
-                  Portfolio Overview:
-                </Text>
-                {investments.slice(0, 3).map((inv, idx) => (
-                  <View
-                    key={idx}
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      marginBottom: 4,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        color: theme.colors.text,
-                        flex: 1,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {inv.platform} ({inv.category})
-                    </Text>
-                    <View style={{ alignItems: "flex-end" }}>
+
+            <View style={styles.expenseSummary}>
+              {(() => {
+                const allocated = monthlyData?.investmentAmount || 0;
+                const invested = investments.reduce(
+                  (sum, inv) => sum + (inv.totalInvestment || inv.amount + (inv.transactionCosts || 0)),
+                  0,
+                );
+                const balance = allocated - invested;
+                const allocPct = financialData.income > 0
+                  ? Math.round((allocated / financialData.income) * 100)
+                  : 0;
+                const investPct = allocated > 0
+                  ? Math.round((invested / allocated) * 100)
+                  : 0;
+                const balancePct = allocated > 0
+                  ? Math.round((Math.abs(balance) / allocated) * 100)
+                  : 0;
+                return (
+                  <>
+                    <View style={styles.summaryRow}>
                       <Text
-                        style={{
-                          fontSize: 13,
-                          color: theme.colors.text,
-                          fontWeight: "500",
-                        }}
+                        style={[
+                          styles.summaryLabel,
+                          { color: theme.colors.textSecondary, flex: 1 },
+                        ]}
                       >
-                        {showSavingsAmount ? fmt(inv.amount) : "•••"}
+                        Allocated
+                        {showSavingsAmount && (
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                            {" "}({allocPct}% of income)
+                          </Text>
+                        )}:
                       </Text>
-                      {showSavingsAmount && (
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: theme.colors.textSecondary,
-                          }}
-                        >
-                          {financialData.savingsInvestments > 0
-                            ? Math.round(
-                                ((inv.amount || 0) /
-                                  financialData.savingsInvestments) *
-                                  100,
-                              )
-                            : 0}
-                          %
-                        </Text>
-                      )}
+                      <Text
+                        style={[styles.summaryValue, { color: theme.colors.text }]}
+                      >
+                        {showSavingsAmount ? fmt(allocated) : "•••••"}
+                      </Text>
                     </View>
-                  </View>
-                ))}
-                {investments.length > 3 && (
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: theme.colors.tabBarActive,
-                      marginTop: 4,
-                    }}
-                  >
-                    + {investments.length - 3} more...
-                  </Text>
-                )}
-              </View>
-            )}
+                    <View style={styles.summaryRow}>
+                      <Text
+                        style={[
+                          styles.summaryLabel,
+                          { color: theme.colors.textSecondary, flex: 1 },
+                        ]}
+                      >
+                        Invested
+                        {showSavingsAmount && (
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                            {" "}({investPct}% of alloc)
+                          </Text>
+                        )}:
+                      </Text>
+                      <Text
+                        style={[styles.summaryValue, { color: theme.colors.text }]}
+                      >
+                        {showSavingsAmount ? fmt(invested) : "•••••"}
+                      </Text>
+                    </View>
+                    <View style={[styles.summaryRow, styles.balanceRow]}>
+                      <Text
+                        style={[
+                          styles.summaryLabel,
+                          { color: theme.colors.textSecondary, flex: 1 },
+                        ]}
+                      >
+                        Balance
+                        {showSavingsAmount && (
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                            {" "}({balancePct}%)
+                          </Text>
+                        )}:
+                      </Text>
+                      <Text
+                        style={[
+                          styles.summaryValue,
+                          {
+                            color: balance >= 0 ? "#10b981" : "#ef4444",
+                          },
+                        ]}
+                      >
+                        {showSavingsAmount ? fmt(balance) : "•••••"}
+                      </Text>
+                    </View>
+                  </>
+                );
+              })()}
+            </View>
           </View>
 
           {/* ── Expenses Overview ── */}
@@ -1270,106 +1367,83 @@ export default function DashboardScreen({ navigation }) {
                 <Text
                   style={[
                     styles.summaryLabel,
-                    { color: theme.colors.textSecondary },
+                    { color: theme.colors.textSecondary, flex: 1 },
                   ]}
                 >
-                  Allocated:
-                </Text>
-                <View style={styles.amountWithPercentage}>
-                  <Text
-                    style={[styles.summaryValue, { color: theme.colors.text }]}
-                  >
-                    {showExpenseAmount
-                      ? fmt(financialData.expenses.allocated)
-                      : "•••••"}
-                  </Text>
+                  Allocated
                   {showExpenseAmount && (
-                    <Text
-                      style={[
-                        styles.summaryPercentage,
-                        { color: theme.colors.textSecondary },
-                      ]}
-                    >
-                      (
-                      {financialData.income > 0
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                      {" "}({financialData.income > 0
                         ? Math.round(
                             (financialData.expenses.allocated /
                               financialData.income) *
                               100,
                           )
-                        : 0}
-                      % of income)
+                        : 0}% of income)
                     </Text>
-                  )}
-                </View>
+                  )}:
+                </Text>
+                <Text
+                  style={[styles.summaryValue, { color: theme.colors.text }]}
+                >
+                  {showExpenseAmount
+                    ? fmt(financialData.expenses.allocated)
+                    : "•••••"}
+                </Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text
                   style={[
                     styles.summaryLabel,
-                    { color: theme.colors.textSecondary },
+                    { color: theme.colors.textSecondary, flex: 1 },
                   ]}
                 >
-                  Spent:
-                </Text>
-                <View style={styles.amountWithPercentage}>
-                  <Text
-                    style={[styles.summaryValue, { color: theme.colors.text }]}
-                  >
-                    {showExpenseAmount
-                      ? fmt(financialData.expenses.spent)
-                      : "•••••"}
-                  </Text>
+                  Spent
                   {showExpenseAmount && (
-                    <Text
-                      style={[
-                        styles.summaryPercentage,
-                        { color: theme.colors.textSecondary },
-                      ]}
-                    >
-                      ({Math.round(exactExpensePercentage)}%)
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                      {" "}({Math.round(exactExpensePercentage)}% of alloc)
                     </Text>
-                  )}
-                </View>
+                  )}:
+                </Text>
+                <Text
+                  style={[styles.summaryValue, { color: theme.colors.text }]}
+                >
+                  {showExpenseAmount
+                    ? fmt(financialData.expenses.spent)
+                    : "•••••"}
+                </Text>
               </View>
               <View style={[styles.summaryRow, styles.balanceRow]}>
                 <Text
                   style={[
                     styles.summaryLabel,
-                    { color: theme.colors.textSecondary },
+                    { color: theme.colors.textSecondary, flex: 1 },
                   ]}
                 >
-                  Remaining:
-                </Text>
-                <View style={styles.amountWithPercentage}>
-                  <Text
-                    style={[
-                      styles.summaryValue,
-                      {
-                        color:
-                          financialData.expenses.allocated -
-                            financialData.expenses.spent >=
-                          0
-                            ? "#10b981"
-                            : "#ef4444",
-                      },
-                    ]}
-                  >
-                    {showExpenseAmount
-                      ? fmt(financialData.expenses.remaining)
-                      : "•••••"}
-                  </Text>
+                  Remaining
                   {showExpenseAmount && (
-                    <Text
-                      style={[
-                        styles.summaryPercentage,
-                        { color: theme.colors.textSecondary },
-                      ]}
-                    >
-                      ({Math.round(100 - exactExpensePercentage)}%)
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                      {" "}({Math.round(100 - exactExpensePercentage)}%)
                     </Text>
-                  )}
-                </View>
+                  )}:
+                </Text>
+                <Text
+                  style={[
+                    styles.summaryValue,
+                    {
+                      color:
+                        financialData.expenses.allocated -
+                          financialData.expenses.spent >=
+                        0
+                          ? "#10b981"
+                          : "#ef4444",
+                    },
+                  ]}
+                >
+                  {showExpenseAmount
+                    ? fmt(financialData.expenses.remaining)
+                    : "•••••"}
+                </Text>
               </View>
             </View>
           </View>
@@ -1484,27 +1558,115 @@ export default function DashboardScreen({ navigation }) {
                   color={theme.colors.tabBarActive}
                 />
               </TouchableOpacity>
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    { borderColor: theme.colors.border },
+                  ]}
+                  onPress={() => setShowUnallocatedModal(true)}
+                >
+                  <Ionicons
+                    name="add-outline"
+                    size={16}
+                    color={theme.colors.tabBarActive}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    { borderColor: theme.colors.border },
+                  ]}
+                  onPress={() =>
+                    navigation.navigate("SpendingDetails", {
+                      selectedMonth,
+                      category: "Unallocated",
+                    })
+                  }
+                >
+                  <Ionicons
+                    name="chevron-forward-outline"
+                    size={16}
+                    color={theme.colors.tabBarActive}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
-            <Text
-              style={[styles.cardValue, { color: theme.colors.text }]}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >
-              {showBalanceAmount ? fmt(financialData.balance) : "••••••"}
-            </Text>
-            <Text
-              style={[
-                styles.cardSubtitle,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              {financialData.income > 0
-                ? Math.round(
-                    (financialData.balance / financialData.income) * 100,
-                  )
-                : 0}
-              % of income
-            </Text>
+
+            {(() => {
+              const allocated = monthlyData?.balance || 0;
+              const spent = allSpending
+                .filter((s) => s.category === "Unallocated")
+                .reduce((sum, s) => sum + (s.totalSpending || s.amount || 0), 0);
+              const remaining = allocated - spent;
+              const allocPct = financialData.income > 0
+                ? Math.round((allocated / financialData.income) * 100)
+                : 0;
+              const spentPct = allocated > 0
+                ? Math.round((spent / allocated) * 100)
+                : 0;
+              const remainPct = allocated > 0
+                ? Math.round((Math.abs(remaining) / allocated) * 100)
+                : 0;
+              return (
+                <View style={styles.expenseSummary}>
+                  <View style={styles.summaryRow}>
+                    <Text
+                      style={[styles.summaryLabel, { color: theme.colors.textSecondary, flex: 1 }]}
+                    >
+                      Allocated
+                      {showBalanceAmount && (
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                          {" "}({allocPct}% of income)
+                        </Text>
+                      )}:
+                    </Text>
+                    <Text
+                      style={[styles.summaryValue, { color: theme.colors.text }]}
+                    >
+                      {showBalanceAmount ? fmt(allocated) : "•••••"}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text
+                      style={[styles.summaryLabel, { color: theme.colors.textSecondary, flex: 1 }]}
+                    >
+                      Spent
+                      {showBalanceAmount && (
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                          {" "}({spentPct}% of alloc)
+                        </Text>
+                      )}:
+                    </Text>
+                    <Text
+                      style={[styles.summaryValue, { color: theme.colors.text }]}
+                    >
+                      {showBalanceAmount ? fmt(spent) : "•••••"}
+                    </Text>
+                  </View>
+                  <View style={[styles.summaryRow, styles.balanceRow]}>
+                    <Text
+                      style={[styles.summaryLabel, { color: theme.colors.textSecondary, flex: 1 }]}
+                    >
+                      Remaining
+                      {showBalanceAmount && (
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                          {" "}({remainPct}%)
+                        </Text>
+                      )}:
+                    </Text>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        { color: remaining >= 0 ? "#10b981" : "#ef4444" },
+                      ]}
+                    >
+                      {showBalanceAmount ? fmt(remaining) : "•••••"}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
           </View>
 
           {/* ── Summary ── */}
@@ -1560,15 +1722,6 @@ export default function DashboardScreen({ navigation }) {
               % of your income. Expenses are at{" "}
               {Math.round(exactExpensePercentage)}% with{" "}
               {fmt(financialData.expenses.remaining)} remaining.
-            </Text>
-          </View>
-
-          {/* ── Footer ── */}
-          <View style={styles.footerContainer}>
-            <Text
-              style={[styles.footerText, { color: theme.colors.textSecondary }]}
-            >
-              Updated: {selectedMonth}
             </Text>
           </View>
         </View>
@@ -1747,6 +1900,122 @@ export default function DashboardScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Unallocated Spending Modal */}
+      <Modal
+        visible={showUnallocatedModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowUnallocatedModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 20 }}>
+            <View style={{ backgroundColor: theme.colors.card, borderRadius: 16, padding: 24, width: "100%", maxWidth: 360 }}>
+              <Text style={{ fontSize: 18, fontWeight: "bold", color: theme.colors.text, marginBottom: 16, textAlign: "center" }}>
+                Record Spending
+              </Text>
+              <Text style={{ fontSize: 14, color: theme.colors.textSecondary, marginBottom: 16, textAlign: "center" }}>
+                Available: {fmt(financialData.balance)}
+              </Text>
+              <View style={{ marginBottom: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Item *</Text>
+                <TextInput
+                  style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, color: theme.colors.text, backgroundColor: theme.colors.background }}
+                  placeholder="e.g. Groceries"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={unallocatedItem}
+                  onChangeText={setUnallocatedItem}
+                />
+              </View>
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
+                <View style={{ flex: 0.7 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Amount *</Text>
+                  <TextInput
+                    style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, color: theme.colors.text, backgroundColor: theme.colors.background }}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    keyboardType="numeric"
+                    value={unallocatedAmount}
+                    onChangeText={setUnallocatedAmount}
+                  />
+                </View>
+                <View style={{ flex: 0.3 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Txn Cost</Text>
+                  <TextInput
+                    style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, color: theme.colors.text, backgroundColor: theme.colors.background }}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    keyboardType="numeric"
+                    value={unallocatedTxnCost}
+                    onChangeText={setUnallocatedTxnCost}
+                  />
+                </View>
+              </View>
+              <View style={{ marginBottom: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Date</Text>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, backgroundColor: theme.colors.background, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+                    onPress={() => {
+                      const newDate = new Date(unallocatedDate);
+                      newDate.setDate(newDate.getDate() - 1);
+                      setUnallocatedDate(newDate);
+                    }}
+                  >
+                    <Ionicons name="chevron-back" size={16} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flex: 3, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, backgroundColor: theme.colors.background, flexDirection: "row", alignItems: "center", justifyContent: "center" }}
+                    onPress={() => setUnallocatedDate(new Date())}
+                  >
+                    <Ionicons name="calendar-outline" size={16} color={theme.colors.textSecondary} style={{ marginRight: 8 }} />
+                    <Text style={{ color: theme.colors.text, fontSize: 14 }}>
+                      {unallocatedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, backgroundColor: theme.colors.background, flexDirection: "row", alignItems: "center", justifyContent: "center" }}
+                    onPress={() => {
+                      const newDate = new Date(unallocatedDate);
+                      newDate.setDate(newDate.getDate() + 1);
+                      setUnallocatedDate(newDate);
+                    }}
+                  >
+                    <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Description</Text>
+                <TextInput
+                  style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, color: theme.colors.text, backgroundColor: theme.colors.background }}
+                  placeholder="Optional"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={unallocatedDesc}
+                  onChangeText={setUnallocatedDesc}
+                />
+              </View>
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: theme.colors.border, alignItems: "center" }}
+                  onPress={() => setShowUnallocatedModal(false)}
+                >
+                  <Text style={{ color: theme.colors.text, fontWeight: "600" }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: theme.colors.tabBarActive, alignItems: "center" }}
+                  onPress={handleSaveUnallocatedSpending}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "600" }}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,9 +8,9 @@ import {
   StyleSheet,
   Alert,
   StatusBar,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +22,8 @@ import {
   updateInvestment,
   deleteInvestment,
   getMonthlySummary,
+  getSpending,
+  getUserProfile,
 } from "../services/firestoreService";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -37,6 +39,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [investments, setInvestments] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(
     route?.params?.selectedMonth || getCurrentMonth(),
@@ -54,7 +57,28 @@ const AddInvestmentScreen = ({ navigation, route }) => {
 
   const user = getCurrentUser();
   const uid = user?.uid;
+  const [profile, setProfile] = useState(null);
 
+  // Fetch profile for currency
+  useEffect(() => {
+    if (!uid) return;
+    getUserProfile(uid).then(setProfile).catch(() => {});
+  }, [uid]);
+
+  const currencyCode = profile?.currency || "KES";
+  const fmt = (amount) => {
+    const num = typeof amount === "number" ? amount : parseFloat(amount) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(num);
+  };
+
+  const [pendingBalance, setPendingBalance] = useState(0);
+
+  // Load investments data from database
   useEffect(() => {
     if (uid) {
       loadInvestments();
@@ -65,25 +89,43 @@ const AddInvestmentScreen = ({ navigation, route }) => {
   const loadMonthlyData = async () => {
     try {
       const monthlyData = await getMonthlySummary(uid, selectedMonth);
-      // Use same calculation as dashboard: savingsAmount + investmentAmount
-      const savingsInvestments =
-        (monthlyData?.savingsAmount || 0) +
-        (monthlyData?.investmentAmount || 0);
-      setAllocatedAmount(savingsInvestments);
+
+      const income = monthlyData?.income || 0;
+      const expensesAmount = monthlyData?.expensesAmount || 0;
+      const investmentAllocated = monthlyData?.investmentAmount || 0;
+
+      setAllocatedAmount(investmentAllocated);
+
+      // Balance = income - expenses allocation - investment allocation
+      const balance = income - expensesAmount - investmentAllocated;
+
+      setPendingBalance(balance > 0 ? balance : 0);
     } catch (error) {
       console.error("Failed to load monthly data:", error);
       setAllocatedAmount(0);
+      setPendingBalance(0);
     }
   };
 
   const loadInvestments = async () => {
     try {
       const data = await getInvestments(uid, selectedMonth);
-      setInvestments(data || []);
+      const sorted = (data || []).sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+      setInvestments(sorted);
     } catch (error) {
       console.error("Failed to load investments:", error);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([loadInvestments(), loadMonthlyData()]);
+    setRefreshing(false);
+  }, [uid, selectedMonth]);
 
   const resetForm = () => {
     setPlatform("");
@@ -229,7 +271,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
             • {item.platform}
           </Text>
           <Text style={[styles.investmentAmount, { color: theme.colors.text }]}>
-            KES {item.amount.toLocaleString()}
+            {fmt(item.amount)}
           </Text>
         </View>
         <View style={styles.investmentDetails}>
@@ -251,8 +293,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
               { color: theme.colors.textSecondary },
             ]}
           >
-            Transaction Cost: KES{" "}
-            {(item.transactionCosts || 0).toLocaleString()}
+            Transaction Cost: {fmt(item.transactionCosts || 0)}
           </Text>
           {item.description && (
             <Text
@@ -285,20 +326,6 @@ const AddInvestmentScreen = ({ navigation, route }) => {
         </TouchableOpacity>
       </View>
     </View>
-  );
-
-  const renderCategoryItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.dropdownItem}
-      onPress={() => {
-        setCategory(item);
-        setShowCategoryDropdown(false);
-      }}
-    >
-      <Text style={[styles.dropdownItemText, { color: theme.colors.text }]}>
-        {item}
-      </Text>
-    </TouchableOpacity>
   );
 
   const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
@@ -368,6 +395,9 @@ const AddInvestmentScreen = ({ navigation, route }) => {
           scrollEnabled={!showCategoryDropdown}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+          }
         >
           {/* Add Investment Form */}
           <View
@@ -386,22 +416,72 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.allocatedAmountLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Allocated Amount
-              </Text>
-              <Text
-                style={[
-                  styles.allocatedAmountValue,
-                  { color: theme.colors.text },
-                ]}
-              >
-                KES {allocatedAmount.toLocaleString()}
-              </Text>
+              <View style={styles.summaryRow}>
+                <View style={{ flex: 1, alignItems: "center" }}>
+                  <Text
+                    style={[styles.allocatedAmountLabel, { color: theme.colors.textSecondary }]}
+                  >
+                    Allocated
+                  </Text>
+                  <Text
+                    style={[styles.allocatedAmountValue, { color: theme.colors.tabBarActive }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {fmt(allocatedAmount)}
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    width: 1,
+                    backgroundColor: theme.colors.border,
+                    marginVertical: 4,
+                  }}
+                />
+                <View style={{ flex: 1, alignItems: "center" }}>
+                  <Text
+                    style={[styles.allocatedAmountLabel, { color: theme.colors.textSecondary }]}
+                  >
+                    Outlay
+                  </Text>
+                  <Text
+                    style={[styles.allocatedAmountValue, { color: theme.colors.text }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {fmt(totalOutlay)}
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    width: 1,
+                    backgroundColor: theme.colors.border,
+                    marginVertical: 4,
+                  }}
+                />
+                <View style={{ flex: 1, alignItems: "center" }}>
+                  <Text
+                    style={[styles.allocatedAmountLabel, { color: theme.colors.textSecondary }]}
+                  >
+                    Balance
+                  </Text>
+                  <Text
+                    style={[
+                      styles.allocatedAmountValue,
+                      {
+                        color:
+                          allocatedAmount - totalOutlay > 0
+                            ? theme.colors.tabBarActive
+                            : "#ef4444",
+                      },
+                    ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {fmt(Math.max(allocatedAmount - totalOutlay, 0))}
+                  </Text>
+                </View>
+              </View>
             </View>
 
             <Text style={[styles.formTitle, { color: theme.colors.text }]}>
@@ -504,50 +584,51 @@ const AddInvestmentScreen = ({ navigation, route }) => {
               />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text
-                style={[styles.label, { color: theme.colors.textSecondary }]}
-              >
-                Amount (KES) *
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.colors.background,
-                    borderColor: theme.colors.border,
-                    color: theme.colors.text,
-                  },
-                ]}
-                placeholder="Enter amount"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text
-                style={[styles.label, { color: theme.colors.textSecondary }]}
-              >
-                Transaction Cost (KES)
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.colors.background,
-                    borderColor: theme.colors.border,
-                    color: theme.colors.text,
-                  },
-                ]}
-                placeholder="Enter transaction cost"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={transactionCosts}
-                onChangeText={setTransactionCosts}
-                keyboardType="numeric"
-              />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <View style={{ flex: 0.7 }}>
+                <Text
+                  style={[styles.label, { color: theme.colors.textSecondary }]}
+                >
+                  Amount ({currencyCode}) *
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.background,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  placeholder="Enter amount"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={amount}
+                  onChangeText={setAmount}
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={{ flex: 0.3 }}>
+                <Text
+                  style={[styles.label, { color: theme.colors.textSecondary }]}
+                >
+                  Txn Cost ({currencyCode})
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.background,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  placeholder="0.00"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={transactionCosts}
+                  onChangeText={setTransactionCosts}
+                  keyboardType="numeric"
+                />
+              </View>
             </View>
 
             <View style={styles.inputGroup}>
@@ -605,7 +686,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                 <Text
                   style={[styles.totalAmount, { color: theme.colors.text }]}
                 >
-                  Outlay: KES {totalOutlay.toLocaleString()}
+                  Outlay: {fmt(totalOutlay)}
                 </Text>
               </View>
 
@@ -615,8 +696,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                   { color: theme.colors.textSecondary, marginBottom: 12 },
                 ]}
               >
-                Principal: KES {totalInvested.toLocaleString()} | Fees: KES{" "}
-                {totalTransactionCosts.toLocaleString()}
+                Principal: {fmt(totalInvested)} | Fees: {fmt(totalTransactionCosts)}
               </Text>
 
               {investments.map((investment) => (
@@ -654,7 +734,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1,
   },
   backButton: {
     width: 40,
@@ -689,20 +768,23 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   allocatedAmountContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
     marginBottom: 16,
   },
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   allocatedAmountLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "500",
+    marginBottom: 4,
   },
   allocatedAmountValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "bold",
   },
   formTitle: {
@@ -750,9 +832,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  dropdownList: {
-    maxHeight: 240,
-  },
   dropdownScroll: {
     maxHeight: 240,
   },
@@ -764,10 +843,6 @@ const styles = StyleSheet.create({
   },
   dropdownItemText: {
     fontSize: 16,
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: "top",
   },
   addButton: {
     borderRadius: 8,
@@ -797,9 +872,6 @@ const styles = StyleSheet.create({
   totalAmount: {
     fontSize: 14,
     fontWeight: "600",
-  },
-  list: {
-    marginBottom: 16,
   },
   investmentItem: {
     flexDirection: "row",

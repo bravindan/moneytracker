@@ -11,13 +11,13 @@ import {
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
-import { getCurrentUser, changePassword } from '../services/authService';
-import { getUserProfile, updateUserProfile } from '../services/firestoreService';
-import CustomAlert from '../components/CustomAlert';
+import { getCurrentUser, changePassword, updateUserEmail, deleteCurrentUser } from '../services/authService';
+import { getUserProfile, updateUserProfile, deleteAllUserData } from '../services/firestoreService';
 
 const ProfileScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -27,6 +27,9 @@ const ProfileScreen = ({ navigation }) => {
   const [saving, setSaving] = useState(false);
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [emailPassword, setEmailPassword] = useState('');
+  const [showEmailPassword, setShowEmailPassword] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -34,6 +37,11 @@ const ProfileScreen = ({ navigation }) => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteStep, setDeleteStep] = useState(1); // 1 = confirm, 2 = password
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const user = getCurrentUser();
   const uid = user?.uid;
@@ -59,6 +67,7 @@ const ProfileScreen = ({ navigation }) => {
           setProfile(data);
           setUsername(data.username || data.displayName || '');
           setPhone(data.phone || '');
+          setEmail(data.email || '');
         }
       } catch (error) {
         console.error('Failed to fetch profile:', error);
@@ -76,16 +85,37 @@ const ProfileScreen = ({ navigation }) => {
       Alert.alert('Validation Error', 'Username cannot be empty');
       return;
     }
+
+    const newEmail = email.trim();
+    const emailChanged = newEmail && newEmail !== (profile?.email || '');
+
+    if (emailChanged && !emailPassword) {
+      Alert.alert('Required', 'Enter your current password to update your email address.');
+      return;
+    }
+
     setSaving(true);
     try {
-      await updateUserProfile(uid, { username: username.trim() });
-      Alert.alert('Success', 'Profile updated');
-      // Refresh profile to get updated data
+      // Update Firebase Auth email if changed
+      if (emailChanged) {
+        await updateUserEmail(newEmail, emailPassword);
+        setEmailPassword('');
+        Alert.alert(
+          'Verification Email Sent',
+          `A verification link has been sent to ${newEmail}. Click the link to confirm your new email address.`
+        );
+      }
+
+      // Update Firestore profile
+      await updateUserProfile(uid, { username: username.trim(), email: newEmail });
+      if (!emailChanged) {
+        Alert.alert('Success', 'Profile updated');
+      }
       const updated = await getUserProfile(uid);
       setProfile(updated);
     } catch (error) {
       console.error('Failed to update profile:', error);
-      Alert.alert('Error', 'Could not update profile');
+      Alert.alert('Error', error.message || 'Could not update profile');
     } finally {
       setSaving(false);
     }
@@ -124,6 +154,34 @@ const ProfileScreen = ({ navigation }) => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) {
+      Alert.alert('Required', 'Please enter your password to confirm deletion.');
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      // Delete Firestore data first
+      await deleteAllUserData(uid);
+      // Then delete the Firebase Auth account
+      await deleteCurrentUser(deletePassword);
+      setShowDeleteModal(false);
+      // User will be automatically signed out via onAuthStateChanged
+    } catch (error) {
+      console.error('Failed to delete account:', error);
+      Alert.alert('Error', error.message || 'Could not delete account. Please check your password.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const openDeleteModal = () => {
+    setDeleteStep(1);
+    setDeletePassword('');
+    setShowDeleteModal(true);
   };
 
   if (loading) {
@@ -196,6 +254,41 @@ const ProfileScreen = ({ navigation }) => {
           />
           <Text style={[styles.helperText, { color: theme.colors.textSecondary }]}>
             Phone number cannot be changed
+          </Text>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: theme.colors.text }]}>Email Address</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
+            placeholder="Enter email address"
+            placeholderTextColor={theme.colors.textSecondary}
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {email && email !== (profile?.email || '') && (
+            <View style={{ marginTop: 8 }}>
+              <Text style={[styles.label, { color: theme.colors.text, fontSize: 14 }]}>Current Password (to confirm email change)</Text>
+              <View style={[styles.input, { flexDirection: 'row', alignItems: 'center', paddingVertical: 0, backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <TextInput
+                  style={{ flex: 1, paddingVertical: 10, fontSize: 16, color: theme.colors.text }}
+                  placeholder="Enter current password"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={emailPassword}
+                  onChangeText={setEmailPassword}
+                  secureTextEntry={!showEmailPassword}
+                />
+                <TouchableOpacity onPress={() => setShowEmailPassword(!showEmailPassword)} style={{ padding: 10 }}>
+                  <Ionicons name={showEmailPassword ? "eye-off-outline" : "eye-outline"} size={20} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+          <Text style={[styles.helperText, { color: theme.colors.textSecondary }]}>
+            Used for password recovery
           </Text>
         </View>
 
@@ -292,8 +385,101 @@ const ProfileScreen = ({ navigation }) => {
             <Text style={styles.saveButtonText}>Save Profile Changes</Text>
           )}
           </TouchableOpacity>
+
+        {/* Delete Account Section */}
+        <View style={[styles.formGroup, { marginTop: 20 }]}>
+          <TouchableOpacity
+            style={[styles.passwordToggle, { backgroundColor: theme.isDark ? '#450a0a' : '#fef2f2', borderColor: theme.isDark ? '#7f1d1d' : '#fee2e2' }]}
+            onPress={openDeleteModal}
+          >
+            <Text style={[styles.passwordToggleText, { color: theme.isDark ? '#fca5a5' : '#dc2626' }]}>Delete Account</Text>
+            <Ionicons name="trash-outline" size={20} color={theme.isDark ? '#fca5a5' : '#dc2626'} />
+          </TouchableOpacity>
+        </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Delete Account Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDeleteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+            {deleteStep === 1 ? (
+              <>
+                <View style={[styles.modalIcon, { backgroundColor: theme.isDark ? '#450a0a' : '#fef2f2' }]}>
+                  <Ionicons name="warning-outline" size={40} color={theme.isDark ? '#fca5a5' : '#dc2626'} />
+                </View>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Delete Account?</Text>
+                <Text style={[styles.modalText, { color: theme.colors.textSecondary }]}>
+                  This action is permanent and cannot be undone. All your data including transactions, budgets, investments, and expenses will be permanently deleted.
+                </Text>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: theme.colors.border }]}
+                    onPress={() => setShowDeleteModal(false)}
+                  >
+                    <Text style={[styles.modalButtonText, { color: theme.colors.text }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: theme.isDark ? '#7f1d1d' : '#dc2626' }]}
+                    onPress={() => setDeleteStep(2)}
+                  >
+                    <Text style={[styles.modalButtonText, { color: '#ffffff' }]}>Continue</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={[styles.modalIcon, { backgroundColor: theme.isDark ? '#450a0a' : '#fef2f2' }]}>
+                  <Ionicons name="lock-closed-outline" size={40} color={theme.isDark ? '#fca5a5' : '#dc2626'} />
+                </View>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Confirm Password</Text>
+                <Text style={[styles.modalText, { color: theme.colors.textSecondary }]}>
+                  Enter your password to permanently delete your account.
+                </Text>
+                <View style={[styles.modalInput, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                  <TextInput
+                    style={{ flex: 1, fontSize: 16, color: theme.colors.text }}
+                    placeholder="Enter your password"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={deletePassword}
+                    onChangeText={setDeletePassword}
+                    secureTextEntry={!showDeletePassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity onPress={() => setShowDeletePassword(!showDeletePassword)} style={{ padding: 10 }}>
+                    <Ionicons name={showDeletePassword ? "eye-off-outline" : "eye-outline"} size={20} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: theme.colors.border }]}
+                    onPress={() => setShowDeleteModal(false)}
+                    disabled={deleting}
+                  >
+                    <Text style={[styles.modalButtonText, { color: theme.colors.text }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: deleting ? theme.colors.textSecondary : (theme.isDark ? '#7f1d1d' : '#dc2626') }]}
+                    onPress={handleDeleteAccount}
+                    disabled={deleting}
+                  >
+                    {deleting ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={[styles.modalButtonText, { color: '#ffffff' }]}>Delete Forever</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -373,15 +559,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  profilePhotoPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
   avatarContainer: {
     width: 100,
     height: 100,
@@ -426,19 +603,64 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  infoBox: {
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 20,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
-  infoTitle: {
-    fontSize: 18,
+  modalContent: {
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+  },
+  modalIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 12,
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  infoText: {
+  modalText: {
     fontSize: 14,
-    marginBottom: 4,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  modalInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    width: '100%',
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalButton: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

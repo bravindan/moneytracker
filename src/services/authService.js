@@ -5,7 +5,9 @@ import {
   sendPasswordResetEmail,
   updateProfile,
   updatePassword,
+  verifyBeforeUpdateEmail,
   reauthenticateWithCredential,
+  deleteUser,
   EmailAuthProvider,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -100,3 +102,41 @@ export const subscribeToAuthChanges = (callback) =>
  * @returns {import('firebase/auth').User | null}
  */
 export const getCurrentUser = () => (auth ? auth.currentUser : null);
+
+/**
+ * Update the current user's email in Firebase Auth.
+ * Sends a verification email to the new address first.
+ * Requires reauthentication with the current password.
+ * @param {string} newEmail
+ * @param {string} currentPassword
+ * @returns {Promise<void>}
+ */
+export const updateUserEmail = async (newEmail, currentPassword) => {
+  ensureAuthReady();
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error("No authenticated user found");
+  }
+
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await verifyBeforeUpdateEmail(user, newEmail);
+};
+
+/**
+ * Delete the current user account.
+ * Requires reauthentication with the current password.
+ * @param {string} currentPassword
+ * @returns {Promise<void>}
+ */
+export const deleteCurrentUser = async (currentPassword) => {
+  ensureAuthReady();
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error("No authenticated user found");
+  }
+
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await deleteUser(user);
+};

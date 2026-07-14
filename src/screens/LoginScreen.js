@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,9 +11,16 @@ import {
   StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { loginUser, registerUser } from "../services/authService";
-import { createUserProfile } from "../services/firestoreService";
+import { createUserProfile, isEmailTaken } from "../services/firestoreService";
 import { useTheme } from "../contexts/ThemeContext";
+import {
+  isBiometricAvailable,
+  authenticateWithBiometrics,
+  saveCredentials,
+  getSavedCredentials,
+} from "../services/biometricService";
 
 // Firebase Email/Password auth uses a synthetic email built from the phone number.
 // The phone number itself is stored in the Firestore user profile.
@@ -21,13 +28,15 @@ const PHONE_EMAIL_SUFFIX = "@auth.moneytracker";
 
 const firebaseError = (code) =>
   ({
-    "auth/user-not-found": "No account found for this phone number.",
-    "auth/wrong-password": "Incorrect password.",
-    "auth/invalid-credential": "Invalid phone number or password.",
-    "auth/email-already-in-use": "This phone number is already registered.",
+    "auth/invalid-credential": "Invalid email or password.",
+    "auth/user-not-found": "Invalid email or password.",
+    "auth/wrong-password": "Invalid email or password.",
+    "auth/email-already-in-use": "An account with this email already exists.",
     "auth/weak-password": "Password must be at least 6 characters.",
     "auth/too-many-requests": "Too many attempts. Please try again.",
     "auth/network-request-failed": "Network error. Check your connection.",
+    "auth/operation-not-allowed": "This sign-in method is not enabled.",
+    "auth/invalid-email": "Please enter a valid email address.",
   })[code] ?? "Something went wrong. Please try again.";
 
 const styles = StyleSheet.create({
@@ -179,54 +188,119 @@ const styles = StyleSheet.create({
   },
 });
 
-export default function LoginScreen() {
+export default function LoginScreen({ navigation }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState("login"); // 'login' | 'register'
+  const [loginEmail, setLoginEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+  useEffect(() => {
+    const checkBiometrics = async () => {
+      const available = await isBiometricAvailable();
+      setBiometricAvailable(available);
+    };
+    checkBiometrics();
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    setError("");
+    const authenticated = await authenticateWithBiometrics();
+    if (!authenticated) return;
+
+    const credentials = await getSavedCredentials();
+    if (!credentials) {
+      setError("No saved credentials. Please sign in with your password first.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await loginUser(credentials.email, credentials.password);
+    } catch (e) {
+      setError("Biometric login failed. Please sign in with your password.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setError("");
-    const cleanPhone = phone.replace(/\D/g, "");
 
-    if (cleanPhone.length !== 10) {
-      setError("Phone number must be exactly 10 digits.");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
-
-    const email = `${cleanPhone}${PHONE_EMAIL_SUFFIX}`;
-    setLoading(true);
-    try {
-      if (mode === "login") {
-        await loginUser(email, password);
-      } else {
-        // Registration: validate username
-        if (username.trim().length === 0) {
-          setError("Please choose a username");
-          return;
+    if (mode === "login") {
+      // Login with email
+      if (!loginEmail.trim()) {
+        setError("Please enter your email address.");
+        return;
+      }
+      if (password.length < 6) {
+        setError("Password must be at least 6 characters.");
+        return;
+      }
+      setLoading(true);
+      try {
+        await loginUser(loginEmail.trim(), password);
+        if (biometricAvailable) {
+          await saveCredentials(loginEmail.trim(), password);
         }
-        const { user } = await registerUser(email, password, username.trim());
+      } catch {
+        setError("Invalid credentials.");
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // Registration
+      const cleanPhone = phone.replace(/\D/g, "");
+      if (username.trim().length === 0) {
+        setError("Please choose a username.");
+        return;
+      }
+      if (!email.trim()) {
+        setError("Please enter your email address.");
+        return;
+      }
+      if (cleanPhone.length !== 10) {
+        setError("Phone number must be exactly 10 digits.");
+        return;
+      }
+      if (password.length < 6) {
+        setError("Password must be at least 6 characters.");
+        return;
+      }
+      setLoading(true);
+      try {
+        // Check if email is already taken (ignore if Firestore query fails)
+        try {
+          const emailExists = await isEmailTaken(email.trim());
+          if (emailExists) {
+            setError("An account with this email already exists.");
+            setLoading(false);
+            return;
+          }
+        } catch {
+          // Firestore query failed — proceed, Firebase Auth will catch duplicates
+        }
+
+        const { user } = await registerUser(email.trim(), password, username.trim());
         await createUserProfile(user.uid, {
           displayName: username.trim(),
-          email: "",
+          email: email.trim(),
           phone: cleanPhone,
-          authProvider: "phone-password",
+          authProvider: "email",
           username: username.trim(),
         });
+      } catch (e) {
+        setError(firebaseError(e.code));
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      setError(firebaseError(e.code));
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -304,42 +378,11 @@ export default function LoginScreen() {
             ))}
           </View>
 
-          {/* ── Phone Number ── */}
-          <View style={{ marginBottom: 16 }}>
-            <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-              Phone Number
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                  color: theme.colors.text,
-                },
-              ]}
-              placeholder="0712 345 678"
-              placeholderTextColor={theme.colors.textSecondary}
-              keyboardType="phone-pad"
-              maxLength={10}
-              value={phone}
-              onChangeText={(t) => {
-                setPhone(t.replace(/\D/g, ""));
-                setError("");
-              }}
-            />
-            <Text
-              style={[styles.helperText, { color: theme.colors.textSecondary }]}
-            >
-              10-digit mobile number (no country code)
-            </Text>
-          </View>
-
-          {/* ── Username (only for registration) ── */}
-          {mode === "register" && (
+          {/* ── Email (login) / Phone + Email + Username (register) ── */}
+          {mode === "login" ? (
             <View style={{ marginBottom: 16 }}>
               <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                Username
+                Email Address
               </Text>
               <TextInput
                 style={[
@@ -350,25 +393,117 @@ export default function LoginScreen() {
                     color: theme.colors.text,
                   },
                 ]}
-                placeholder="Choose a username"
+                placeholder="you@example.com"
                 placeholderTextColor={theme.colors.textSecondary}
-                value={username}
-                onChangeText={(t) => {
-                  setUsername(t);
-                  setError("");
-                }}
+                keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                value={loginEmail}
+                onChangeText={(t) => {
+                  setLoginEmail(t);
+                  setError("");
+                }}
               />
-              <Text
-                style={[
-                  styles.helperText,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                This will be used to greet you
-              </Text>
             </View>
+          ) : (
+            <>
+              <View style={{ marginBottom: 16 }}>
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                  Username
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.card,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  placeholder="Choose a username"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={username}
+                  onChangeText={(t) => {
+                    setUsername(t);
+                    setError("");
+                  }}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+                <Text
+                  style={[
+                    styles.helperText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  This will be used to greet you
+                </Text>
+              </View>
+
+              <View style={{ marginBottom: 16 }}>
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                  Email Address
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.card,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  placeholder="you@example.com"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={email}
+                  onChangeText={(t) => {
+                    setEmail(t);
+                    setError("");
+                  }}
+                />
+                <Text
+                  style={[
+                    styles.helperText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Used for password recovery
+                </Text>
+              </View>
+
+              <View style={{ marginBottom: 16 }}>
+                <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                  Phone Number
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.card,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  placeholder="0712 345 678"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  value={phone}
+                  onChangeText={(t) => {
+                    setPhone(t.replace(/\D/g, ""));
+                    setError("");
+                  }}
+                />
+                <Text
+                  style={[styles.helperText, { color: theme.colors.textSecondary }]}
+                >
+                  10-digit mobile number (no country code)
+                </Text>
+              </View>
+            </>
           )}
 
           {/* ── Password ── */}
@@ -410,6 +545,22 @@ export default function LoginScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+            {mode === "login" && (
+              <TouchableOpacity
+                onPress={() => navigation.navigate("ForgotPassword")}
+                style={{ alignSelf: "flex-end", marginTop: 8 }}
+              >
+                <Text
+                  style={{
+                    color: theme.colors.tabBarActive,
+                    fontSize: 13,
+                    fontWeight: "600",
+                  }}
+                >
+                  Forgot Password?
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* ── Error ── */}
@@ -455,6 +606,41 @@ export default function LoginScreen() {
               </Text>
             )}
           </TouchableOpacity>
+
+          {/* ── Biometric Login ── */}
+          {mode === "login" && biometricAvailable && (
+            <TouchableOpacity
+              onPress={handleBiometricLogin}
+              disabled={loading}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 16,
+                paddingVertical: 12,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.card,
+              }}
+            >
+              <Ionicons
+                name="finger-print-outline"
+                size={22}
+                color={theme.colors.tabBarActive}
+                style={{ marginRight: 8 }}
+              />
+              <Text
+                style={{
+                  color: theme.colors.text,
+                  fontWeight: "600",
+                  fontSize: 15,
+                }}
+              >
+                Sign in with Fingerprint
+              </Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,6 +22,7 @@ import {
   getMonthlySummary,
   updateExpense,
   deleteExpense,
+  getUserProfile,
 } from "../services/firestoreService";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -29,6 +31,23 @@ const AddExpenseScreen = ({ navigation, route }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const user = getCurrentUser();
+  const [profile, setProfile] = useState(null);
+
+  // Fetch profile for currency
+  useEffect(() => {
+    if (!user?.uid) return;
+    getUserProfile(user.uid).then(setProfile).catch(() => {});
+  }, [user?.uid]);
+
+  const currencyCode = profile?.currency || "KES";
+  const fmt = (amount) => {
+    const num = typeof amount === "number" ? amount : parseFloat(amount) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+    }).format(num);
+  };
 
   // Predefined categories
   const [predefinedCategories, setPredefinedCategories] = useState([
@@ -45,6 +64,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
   ]);
 
   // Form state
+  const [refreshing, setRefreshing] = useState(false);
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(
@@ -69,7 +89,12 @@ const AddExpenseScreen = ({ navigation, route }) => {
 
         // Get expenses from dedicated expenses collection
         const expensesData = await getExpenses(user.uid, selectedMonth);
-        setExpenses(expensesData);
+        const sorted = expensesData.sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+          return dateB - dateA;
+        });
+        setExpenses(sorted);
 
         // Get monthly summary for allocation data
         const monthlyData = await getMonthlySummary(user.uid, selectedMonth);
@@ -104,6 +129,25 @@ const AddExpenseScreen = ({ navigation, route }) => {
     loadExpensesData();
   }, [user.uid, selectedMonth]);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const expensesData = await getExpenses(user.uid, selectedMonth);
+      const sorted = expensesData.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+      setExpenses(sorted);
+      const monthlyData = await getMonthlySummary(user.uid, selectedMonth);
+      setAllocatedAmount(monthlyData?.expensesAmount || 0);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [user.uid, selectedMonth]);
+
   // Calculate allocation percentage based on overall expense allocation
   const calculateAllocation = (expenseAmount) => {
     if (allocatedAmount <= 0) return "0";
@@ -131,15 +175,26 @@ const AddExpenseScreen = ({ navigation, route }) => {
       return;
     }
 
-    // Combine predefined categories with user-created categories from expenses
-    const userCategories = [
-      ...new Set(expenses.map((expense) => (expense.category || "").trim())),
-    ];
-    const allCategories = [...predefinedCategories, ...userCategories];
+    const userCategories = expenses
+      .map((expense) => (expense.category || "").trim())
+      .filter((cat) => cat);
 
-    const filtered = allCategories.filter((cat) =>
-      cat.toLowerCase().includes(trimmed.toLowerCase()),
-    );
+    const seen = new Set();
+    const deduped = [];
+
+    const add = (cat) => {
+      const key = cat.toLowerCase();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        deduped.push(cat);
+      }
+    };
+
+    predefinedCategories.forEach(add);
+    userCategories.forEach(add);
+
+    const query = trimmed.toLowerCase();
+    const filtered = deduped.filter((cat) => cat.toLowerCase().includes(query));
     setFilteredCategories(filtered);
     setShowDropdown(true);
   };
@@ -276,7 +331,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
             {expense.category}
           </Text>
           <Text style={[styles.expenseAmount, { color: theme.colors.text }]}>
-            KES {expense.amount.toLocaleString()}
+            {fmt(expense.amount)}
           </Text>
           {parseFloat(allocationPercentage) > 0 && (
             <Text
@@ -338,7 +393,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
           />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-          Add Expense
+          Expense Categories
         </Text>
         <View style={styles.placeholder} />
       </View>
@@ -393,11 +448,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
                     { color: theme.colors.text },
                   ]}
                 >
-                  KES{" "}
-                  {allocatedAmount.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {fmt(allocatedAmount)}
                 </Text>
               </View>
 
@@ -546,10 +597,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
                   <Text
                     style={[styles.totalAmount, { color: theme.colors.text }]}
                   >
-                    Total: KES{" "}
-                    {expenses
-                      .reduce((sum, expense) => sum + expense.amount, 0)
-                      .toLocaleString()}
+                    Total: {fmt(expenses.reduce((sum, expense) => sum + expense.amount, 0))}
                   </Text>
                 </View>
 
@@ -558,6 +606,9 @@ const AddExpenseScreen = ({ navigation, route }) => {
                   renderItem={renderExpenseItem}
                   keyExtractor={(item) => item.id}
                   scrollEnabled={false}
+                  refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+                  }
                 />
               </View>
             )}
@@ -586,7 +637,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1,
   },
   backButton: {
     width: 40,

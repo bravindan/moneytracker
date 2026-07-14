@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   StatusBar,
   FlatList,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,6 +18,8 @@ import {
   deleteSpending,
   updateSpending,
   addSpending,
+  getSpending,
+  getUserProfile,
 } from "../services/firestoreService";
 import {
   Alert,
@@ -25,18 +28,37 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 
 const SpendingDetailsScreen = ({ route, navigation }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const user = getCurrentUser();
+  const [profile, setProfile] = useState(null);
 
   const { category, selectedMonth } = route.params || {};
+  const isUnallocated = category === "Unallocated";
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    getUserProfile(user.uid).then(setProfile).catch(() => {});
+  }, [user?.uid]);
+
+  const currencyCode = profile?.currency || "KES";
+  const fmt = (amount) => {
+    const num = typeof amount === "number" ? amount : parseFloat(amount) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+    }).format(num);
+  };
 
   // State for spending data
   const [spendingList, setSpendingList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [item, setItem] = useState("");
   const [amount, setAmount] = useState("");
@@ -217,29 +239,46 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
     );
   };
 
-  // Load spending data for the specific category
-  useEffect(() => {
-    const loadSpendingData = async () => {
-      try {
-        setLoading(true);
-        const spendingData = await getSpendingByCategory(
+  // Load spending data for the specific category or unallocated spend
+  const loadSpendingData = useCallback(async () => {
+    try {
+      let spendingData = [];
+      if (isUnallocated) {
+        const allSpending = await getSpending(user.uid, selectedMonth);
+        spendingData = allSpending.filter((s) => s.category === "Unallocated");
+      } else if (category) {
+        spendingData = await getSpendingByCategory(
           user.uid,
           category,
           selectedMonth,
         );
-        setSpendingList(spendingData);
-      } catch (error) {
-        console.error("Failed to load spending data:", error);
-        setSpendingList([]);
-      } finally {
-        setLoading(false);
       }
-    };
-
-    if (category) {
-      loadSpendingData();
+      const sorted = spendingData.sort((a, b) => {
+        const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date || 0);
+        const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date || 0);
+        return dateB - dateA;
+      });
+      setSpendingList(sorted);
+    } catch (error) {
+      console.error("Failed to load spending data:", error);
+      setSpendingList([]);
     }
-  }, [user.uid, category, selectedMonth]);
+  }, [user.uid, category, selectedMonth, isUnallocated]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isUnallocated || category) {
+        setLoading(true);
+        loadSpendingData().finally(() => setLoading(false));
+      }
+    }, [loadSpendingData, isUnallocated, category])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadSpendingData();
+    setRefreshing(false);
+  }, [loadSpendingData]);
 
   const renderSpendingItem = ({ item: spending }) => (
     <View
@@ -290,11 +329,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
             Amount:
           </Text>
           <Text style={[styles.detailValue, { color: theme.colors.text }]}>
-            KES{" "}
-            {spending.amount.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            {fmt(spending.amount)}
           </Text>
         </View>
 
@@ -305,11 +340,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
             Transaction Cost:
           </Text>
           <Text style={[styles.detailValue, { color: theme.colors.text }]}>
-            KES{" "}
-            {spending.transactionCosts.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            {fmt(spending.transactionCosts || 0)}
           </Text>
         </View>
 
@@ -341,11 +372,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
               { color: theme.colors.tabBarActive, fontWeight: "bold" },
             ]}
           >
-            KES{" "}
-            {spending.totalSpending.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            {fmt(spending.totalSpending)}
           </Text>
         </View>
       </View>
@@ -400,20 +427,31 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
         </View>
       ) : spendingList.length === 0 ? (
         <View style={styles.emptyContainer}>
+          <Ionicons
+            name="wallet-outline"
+            size={48}
+            color={theme.colors.textSecondary}
+            style={{ marginBottom: 12 }}
+          />
           <Text
-            style={[styles.emptyText, { color: theme.colors.textSecondary }]}
+            style={[styles.emptyText, { color: theme.colors.textSecondary, marginBottom: 20 }]}
           >
             No spending records found for {category}.
           </Text>
           <TouchableOpacity
-            style={[
-              styles.addSpendingButton,
-              { backgroundColor: theme.colors.tabBarActive },
-            ]}
+            style={{
+              backgroundColor: theme.colors.tabBarActive,
+              paddingHorizontal: 24,
+              paddingVertical: 14,
+              borderRadius: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+            }}
             onPress={handleOpenAddModal}
           >
-            <Ionicons name="add-circle-outline" size={16} color="#fff" />
-            <Text style={styles.addSpendingButtonText}>Add Spending</Text>
+            <Ionicons name="add-circle-outline" size={20} color="#fff" />
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>Add Spending</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -423,6 +461,9 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
             renderItem={renderSpendingItem}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContainer}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+            }
           />
         </>
       )}
@@ -503,7 +544,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
                 <Text
                   style={{ marginBottom: 8, color: theme.colors.textSecondary }}
                 >
-                  Item Name:
+                  {isUnallocated ? "Item *" : "Item Name:"}
                 </Text>
                 <TextInput
                   style={[
@@ -514,58 +555,105 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
                       color: theme.colors.text,
                     },
                   ]}
-                  placeholder="e.g., Coffee, Groceries, etc."
+                  placeholder={isUnallocated ? "e.g. Groceries" : "e.g., Coffee, Groceries, etc."}
                   placeholderTextColor={theme.colors.textSecondary}
                   value={item}
                   onChangeText={setItem}
                 />
               </View>
 
-              <View style={{ marginBottom: 16 }}>
-                <Text
-                  style={{ marginBottom: 8, color: theme.colors.textSecondary }}
-                >
-                  Amount:
-                </Text>
-                <TextInput
-                  style={[
-                    { borderWidth: 1, borderRadius: 8, padding: 12 },
-                    {
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border,
-                      color: theme.colors.text,
-                    },
-                  ]}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={amount}
-                  onChangeText={setAmount}
-                />
-              </View>
+              {isUnallocated ? (
+                <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
+                  <View style={{ flex: 0.7 }}>
+                    <Text style={{ marginBottom: 8, color: theme.colors.textSecondary }}>
+                      Amount *
+                    </Text>
+                    <TextInput
+                      style={[
+                        { borderWidth: 1, borderRadius: 8, padding: 12 },
+                        {
+                          backgroundColor: theme.colors.background,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.text,
+                        },
+                      ]}
+                      placeholder="0.00"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      keyboardType="numeric"
+                      value={amount}
+                      onChangeText={setAmount}
+                    />
+                  </View>
+                  <View style={{ flex: 0.3 }}>
+                    <Text style={{ marginBottom: 8, color: theme.colors.textSecondary }}>
+                      Txn Cost
+                    </Text>
+                    <TextInput
+                      style={[
+                        { borderWidth: 1, borderRadius: 8, padding: 12 },
+                        {
+                          backgroundColor: theme.colors.background,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.text,
+                        },
+                      ]}
+                      placeholder="0.00"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      keyboardType="numeric"
+                      value={transactionCosts}
+                      onChangeText={setTransactionCosts}
+                    />
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{ marginBottom: 8, color: theme.colors.textSecondary }}
+                    >
+                      Amount:
+                    </Text>
+                    <TextInput
+                      style={[
+                        { borderWidth: 1, borderRadius: 8, padding: 12 },
+                        {
+                          backgroundColor: theme.colors.background,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.text,
+                        },
+                      ]}
+                      placeholder="0.00"
+                      keyboardType="numeric"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      value={amount}
+                      onChangeText={setAmount}
+                    />
+                  </View>
 
-              <View style={{ marginBottom: 16 }}>
-                <Text
-                  style={{ marginBottom: 8, color: theme.colors.textSecondary }}
-                >
-                  Transaction Cost (Optional):
-                </Text>
-                <TextInput
-                  style={[
-                    { borderWidth: 1, borderRadius: 8, padding: 12 },
-                    {
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border,
-                      color: theme.colors.text,
-                    },
-                  ]}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={transactionCosts}
-                  onChangeText={setTransactionCosts}
-                />
-              </View>
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{ marginBottom: 8, color: theme.colors.textSecondary }}
+                    >
+                      Transaction Cost (Optional):
+                    </Text>
+                    <TextInput
+                      style={[
+                        { borderWidth: 1, borderRadius: 8, padding: 12 },
+                        {
+                          backgroundColor: theme.colors.background,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.text,
+                        },
+                      ]}
+                      placeholder="0.00"
+                      keyboardType="numeric"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      value={transactionCosts}
+                      onChangeText={setTransactionCosts}
+                    />
+                  </View>
+                </>
+              )}
 
               <View style={{ marginBottom: 16 }}>
                 <Text
@@ -821,8 +909,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
   },
   backButton: {
     width: 40,
@@ -876,10 +962,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     flex: 1,
-  },
-  spendingDate: {
-    fontSize: 14,
-    color: "#666",
   },
   spendingDetails: {
     gap: 12,

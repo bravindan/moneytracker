@@ -83,6 +83,56 @@ export const getUserProfile = async (uid) => {
 export const updateUserProfile = (uid, updates) =>
   updateDoc(doc(usersCol(), uid), { ...updates, updatedAt: serverTimestamp() });
 
+/**
+ * Find a user profile by phone number.
+ * @param {string} phone
+ * @returns {Promise<object|null>}
+ */
+export const getUserByPhone = async (phone) => {
+  const q = query(usersCol(), where("phone", "==", phone));
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  return { id: doc.id, ...doc.data() };
+};
+
+/**
+ * Check if an email is already registered.
+ * @param {string} email
+ * @returns {Promise<boolean>}
+ */
+export const isEmailTaken = async (email) => {
+  const q = query(usersCol(), where("email", "==", email));
+  const snap = await getDocs(q);
+  return !snap.empty;
+};
+
+/**
+ * Delete all data for a user (profile + subcollections).
+ * @param {string} uid
+ * @returns {Promise<void>}
+ */
+export const deleteAllUserData = async (uid) => {
+  const subcollections = [
+    transactionsCol(uid),
+    budgetsCol(uid),
+    investmentsCol(uid),
+    expensesCol(uid),
+    spendingCol(uid),
+  ];
+
+  // Delete all documents in each subcollection
+  for (const col of subcollections) {
+    const snap = await getDocs(col);
+    for (const d of snap.docs) {
+      await deleteDoc(d.ref);
+    }
+  }
+
+  // Delete the user profile document
+  await deleteDoc(doc(usersCol(), uid));
+};
+
 // ---------------------------------------------------------------------------
 // Transactions (income / expenses)
 // ---------------------------------------------------------------------------
@@ -189,9 +239,13 @@ export const addInvestment = (uid, data) =>
  * @returns {Promise<object[]>}
  */
 export const getInvestments = async (uid, month) => {
+  if (month) {
+    const q = query(investmentsCol(uid), where("month", "==", month));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
   const snap = await getDocs(investmentsCol(uid));
-  const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  return filterRecordsByMonth(records, month);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
 
 /**
@@ -234,9 +288,13 @@ export const addExpense = (uid, data) =>
  * @returns {Promise<object[]>}
  */
 export const getExpenses = async (uid, month) => {
+  if (month) {
+    const q = query(expensesCol(uid), where("month", "==", month));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
   const snap = await getDocs(expensesCol(uid));
-  const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  return filterRecordsByMonth(records, month);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
 
 /**
@@ -296,9 +354,13 @@ export const updateSpending = (uid, spendingId, updates) =>
  * @returns {Promise<object[]>}
  */
 export const getSpending = async (uid, month) => {
+  if (month) {
+    const q = query(spendingCol(uid), where("month", "==", month));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
   const snap = await getDocs(spendingCol(uid));
-  const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  return filterRecordsByMonth(records, month);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
 
 /**
@@ -360,6 +422,17 @@ export const getMonthlySummaries = async (uid) => {
 export const getMonthlySummary = async (uid, month) => {
   const snap = await getDoc(doc(monthlySummariesCol(uid), month));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+};
+
+export const addUnallocatedSpending = async (uid, data) => {
+  const payload = {
+    ...data,
+    category: "Unallocated",
+    isUnallocated: true,
+    month: resolveWriteMonth(data),
+    createdAt: serverTimestamp(),
+  };
+  return addDoc(spendingCol(uid), payload);
 };
 
 /**

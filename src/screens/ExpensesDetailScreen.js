@@ -6,13 +6,12 @@ import {
   ScrollView,
   StyleSheet,
   StatusBar,
-  FlatList,
   Modal,
   TextInput,
-  DatePickerAndroid,
   Platform,
   Alert,
   KeyboardAvoidingView,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,8 +21,8 @@ import {
   getExpenses,
   getMonthlySummary,
   addSpending,
-  getSpendingByCategory,
   getSpending,
+  getUserProfile,
 } from "../services/firestoreService";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Print from "expo-print";
@@ -35,9 +34,28 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const user = getCurrentUser();
+  const [profile, setProfile] = useState(null);
+
+  // Fetch profile for currency
+  useEffect(() => {
+    if (!user?.uid) return;
+    getUserProfile(user.uid).then(setProfile).catch(() => {});
+  }, [user?.uid]);
+
+  const currencyCode = profile?.currency || "KES";
+  const fmt = (amount) => {
+    const num = typeof amount === "number" ? amount : parseFloat(amount) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(num);
+  };
 
   // State for dynamic data
   const [expenses, setExpenses] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(
     route?.params?.selectedMonth || getCurrentMonth(),
   ); // YYYY-MM format
@@ -57,45 +75,48 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   const [pickerMonthDate, setPickerMonthDate] = useState(new Date());
 
   // Load expenses data from database
-  useEffect(() => {
-    const loadExpensesData = async () => {
-      try {
-        setLoading(true);
+  const loadExpensesData = useCallback(async () => {
+    try {
+      // Get monthly summary first to get total allocated amount
+      const data = await getMonthlySummary(user.uid, selectedMonth);
+      setMonthlyData(data);
+      const totalAllocatedAmount = data?.expensesAmount || 0;
 
-        // Get monthly summary first to get total allocated amount
-        const data = await getMonthlySummary(user.uid, selectedMonth);
-        setMonthlyData(data);
-        const totalAllocatedAmount = data?.expensesAmount || 0;
+      // Get expenses from dedicated expenses collection
+      const expensesData = await getExpenses(user.uid, selectedMonth);
 
-        // Get expenses from dedicated expenses collection
-        const expensesData = await getExpenses(user.uid, selectedMonth);
+      // Get all spending records
+      const spendingData = await getSpending(user.uid, selectedMonth);
+      setAllSpending(spendingData);
 
-        // Get all spending records
-        const spendingData = await getSpending(user.uid, selectedMonth);
-        setAllSpending(spendingData);
+      // Calculate percentages based on total allocated amount from monthly summary
+      const expensesList = expensesData.map((expense) => ({
+        ...expense,
+        percentage:
+          totalAllocatedAmount > 0
+            ? ((expense.amount / totalAllocatedAmount) * 100).toFixed(1)
+            : 0,
+      }));
 
-        // Calculate percentages based on total allocated amount from monthly summary
-        const expensesList = expensesData.map((expense) => ({
-          ...expense,
-          percentage:
-            totalAllocatedAmount > 0
-              ? ((expense.amount / totalAllocatedAmount) * 100).toFixed(1)
-              : 0,
-        }));
-
-        setExpenses(expensesList);
-      } catch (error) {
-        console.error("Failed to load expenses data:", error);
-        setExpenses([]);
-        setMonthlyData(null);
-        setAllSpending([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadExpensesData();
+      setExpenses(expensesList);
+    } catch (error) {
+      console.error("Failed to load expenses data:", error);
+      setExpenses([]);
+      setMonthlyData(null);
+      setAllSpending([]);
+    }
   }, [user.uid, selectedMonth]);
+
+  useEffect(() => {
+    setLoading(true);
+    loadExpensesData().finally(() => setLoading(false));
+  }, [loadExpensesData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadExpensesData();
+    setRefreshing(false);
+  }, [loadExpensesData]);
 
   const fetchFreshSpending = useCallback(async () => {
     try {
@@ -114,10 +135,12 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   );
 
   const totalAllocated = monthlyData?.expensesAmount || 0;
-  const totalSpent = allSpending.reduce(
-    (sum, spending) => sum + (spending.totalSpending || spending.amount || 0),
-    0,
-  );
+  const totalSpent = allSpending
+    .filter((s) => s.category !== "Unallocated")
+    .reduce(
+      (sum, spending) => sum + (spending.totalSpending || spending.amount || 0),
+      0,
+    );
   const totalRemaining = totalAllocated - totalSpent;
 
   // Calculate total spending for each category
@@ -164,10 +187,12 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   const generatePDF = async () => {
     try {
       const todayDate = new Date().toLocaleDateString();
-      const totalTxnCosts = allSpending.reduce(
-        (sum, s) => sum + (s.transactionCosts || 0),
-        0,
-      );
+      const totalTxnCosts = allSpending
+        .filter((s) => s.category !== "Unallocated")
+        .reduce(
+          (sum, s) => sum + (s.transactionCosts || 0),
+          0,
+        );
       let tableHTML = "";
 
       expenses.forEach((expense) => {
@@ -180,12 +205,12 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
         );
 
         tableHTML += `
-          <h3 style="margin-top: 20px; color: #1e3a8a;">${expense.category} (Allocated: KES ${expense.amount.toFixed(2)} | Spent: KES ${catSpent.toFixed(2)})</h3>
+          <h3 style="margin-top: 20px; color: #1e3a8a;">${expense.category} (Allocated: ${fmt(expense.amount)} | Spent: ${fmt(catSpent)})</h3>
           <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
             <tr>
               <th style="border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f3f4f6;">Date</th>
               <th style="border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f3f4f6;">Item</th>
-              <th style="border: 1px solid #ddd; padding: 8px; text-align: right; background-color: #f3f4f6;">Amount (KES)</th>
+              <th style="border: 1px solid #ddd; padding: 8px; text-align: right; background-color: #f3f4f6;">Amount (${currencyCode})</th>
             </tr>
         `;
 
@@ -222,10 +247,10 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
             <h1>Expense Expenditures Report</h1>
             <div class="summary-box">
               <p><strong>Generated on:</strong> ${todayDate}</p>
-              <p><strong>Total Allocated:</strong> KES ${totalAllocated.toFixed(2)}</p>
-              <p><strong>Total Spent:</strong> KES ${totalSpent.toFixed(2)}</p>
-              <p><strong>Total Transaction Costs:</strong> KES ${totalTxnCosts.toFixed(2)}</p>
-              <p><strong>Remaining:</strong> KES ${totalRemaining.toFixed(2)}</p>
+              <p><strong>Total Allocated:</strong> ${fmt(totalAllocated)}</p>
+              <p><strong>Total Spent:</strong> ${fmt(totalSpent)}</p>
+              <p><strong>Total Transaction Costs:</strong> ${fmt(totalTxnCosts)}</p>
+              <p><strong>Remaining:</strong> ${fmt(totalRemaining)}</p>
             </div>
             <h2>Breakdown by Category</h2>
             ${tableHTML}
@@ -397,74 +422,85 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+          }
+        >
           {/* Summary */}
           <View
-            style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}
+            style={[
+              styles.summaryCard,
+              {
+                backgroundColor: theme.colors.background,
+                borderColor: theme.colors.border,
+              },
+            ]}
           >
-            <Text
-              style={[
-                styles.summaryTitle,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              Expense Summary
-            </Text>
             <View style={styles.summaryRow}>
-              <Text
-                style={[
-                  styles.summaryLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Total Allocated:
-              </Text>
-              <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-                KES{" "}
-                {totalAllocated.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text
-                style={[
-                  styles.summaryLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Total Spent:
-              </Text>
-              <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-                KES{" "}
-                {totalSpent.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text
-                style={[
-                  styles.summaryLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Remaining:
-              </Text>
-              <Text
-                style={[
-                  styles.summaryValue,
-                  totalRemaining >= 0 ? styles.positive : styles.negative,
-                ]}
-              >
-                KES{" "}
-                {totalRemaining.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text
+                  style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}
+                >
+                  Allocated
+                </Text>
+                <Text
+                  style={[styles.summaryValue, { color: theme.colors.tabBarActive }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {fmt(totalAllocated)}
+                </Text>
+              </View>
+              <View
+                style={{
+                  width: 1,
+                  backgroundColor: theme.colors.border,
+                  marginVertical: 4,
+                }}
+              />
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text
+                  style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}
+                >
+                  Spent
+                </Text>
+                <Text
+                  style={[styles.summaryValue, { color: theme.colors.text }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {fmt(totalSpent)}
+                </Text>
+              </View>
+              <View
+                style={{
+                  width: 1,
+                  backgroundColor: theme.colors.border,
+                  marginVertical: 4,
+                }}
+              />
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text
+                  style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}
+                >
+                  Remaining
+                </Text>
+                <Text
+                  style={[
+                    styles.summaryValue,
+                    {
+                      color:
+                        totalRemaining >= 0 ? "#10b981" : "#ef4444",
+                    },
+                  ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {fmt(totalRemaining)}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -525,11 +561,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                     <Text
                       style={[styles.detailValue, { color: theme.colors.text }]}
                     >
-                      KES{" "}
-                      {expense.amount.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {fmt(expense.amount)}
                     </Text>
                   </View>
                   <View style={styles.detailRow}>
@@ -544,11 +576,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                     <Text
                       style={[styles.detailValue, { color: theme.colors.text }]}
                     >
-                      KES{" "}
-                      {calculateCategorySpent(expense.category).toLocaleString(
-                        undefined,
-                        { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-                      )}
+                      {fmt(calculateCategorySpent(expense.category))}
                     </Text>
                   </View>
                   <View style={styles.detailRow}>
@@ -570,14 +598,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                           : styles.negative,
                       ]}
                     >
-                      KES{" "}
-                      {(
-                        expense.amount -
-                        calculateCategorySpent(expense.category)
-                      ).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {fmt(expense.amount - calculateCategorySpent(expense.category))}
                     </Text>
                   </View>
                   <View style={styles.spendingButtonContainer}>
@@ -700,56 +721,57 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text
-                  style={[
-                    styles.inputLabel,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Amount:
-                </Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border,
-                      color: theme.colors.text,
-                    },
-                  ]}
-                  placeholder="0.00"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  keyboardType="numeric"
-                  value={spendingAmount}
-                  onChangeText={setSpendingAmount}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text
-                  style={[
-                    styles.inputLabel,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Transaction Cost (Optional):
-                </Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border,
-                      color: theme.colors.text,
-                    },
-                  ]}
-                  placeholder="0.00"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={transactionCosts}
-                  onChangeText={setTransactionCosts}
-                  keyboardType="numeric"
-                />
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <View style={{ flex: 0.7 }}>
+                  <Text
+                    style={[
+                      styles.inputLabel,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Amount:
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.border,
+                        color: theme.colors.text,
+                      },
+                    ]}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    keyboardType="numeric"
+                    value={spendingAmount}
+                    onChangeText={setSpendingAmount}
+                  />
+                </View>
+                <View style={{ flex: 0.3 }}>
+                  <Text
+                    style={[
+                      styles.inputLabel,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Txn Cost:
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.border,
+                        color: theme.colors.text,
+                      },
+                    ]}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={transactionCosts}
+                    onChangeText={setTransactionCosts}
+                    keyboardType="numeric"
+                  />
+                </View>
               </View>
 
               <View style={styles.inputGroup}>
@@ -990,8 +1012,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
   },
   backButton: {
     width: 40,
@@ -1040,28 +1060,24 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   summaryCard: {
-    borderRadius: 12,
     padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
     marginBottom: 20,
-  },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 12,
   },
   summaryRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    justifyContent: "space-between",
   },
   summaryLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "500",
+    marginBottom: 4,
   },
   summaryValue: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "bold",
   },
   expenseCard: {
     borderRadius: 12,
@@ -1233,26 +1249,6 @@ const styles = StyleSheet.create({
   // Date picker styles
   datePickerContainer: {
     gap: 12,
-  },
-  datePickerLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  dateOptions: {
-    gap: 8,
-  },
-  dateOptionButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  dateOptionText: {
-    fontSize: 14,
-    fontWeight: "500",
   },
 });
 
