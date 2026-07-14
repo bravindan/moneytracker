@@ -126,7 +126,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 20,
-    borderBottomWidth: 1,
   },
   menuIconContainer: {
     width: 40,
