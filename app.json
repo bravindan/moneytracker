@@ -46,7 +46,11 @@
         {
           "android": {
             "enableProguardInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "excludeFromJitpack": true
+          },
+          "hermes": {
+            "static": true
           }
         }
       ],
