@@ -94,15 +94,8 @@ const AddInvestmentScreen = ({ navigation, route }) => {
 
       setAllocatedAmount(investmentAllocated);
 
-      const spending = await getSpending(uid, selectedMonth);
-      const totalCategorySpends = spending.reduce(
-        (sum, s) => sum + (parseFloat(s.amount) || 0),
-        0,
-      );
-
-      const reservedOutlay = parseFloat(monthlyData?.investmentAmount) || 0;
-
-      const balance = income - expensesAmount - reservedOutlay - totalCategorySpends;
+      // Balance = income - expenses allocation - investment allocation
+      const balance = income - expensesAmount - investmentAllocated;
 
       setPendingBalance(balance > 0 ? balance : 0);
     } catch (error) {
