@@ -104,13 +104,11 @@ const AddInvestmentScreen = ({ navigation, route }) => {
 
       const balance = income - expensesAmount - reservedOutlay - totalCategorySpends;
 
-      setTotalSpent(totalCategorySpends);
       setPendingBalance(balance > 0 ? balance : 0);
     } catch (error) {
       console.error("Failed to load monthly data:", error);
       setAllocatedAmount(0);
       setPendingBalance(0);
-      setTotalSpent(0);
     }
   };
 
