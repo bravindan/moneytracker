@@ -48,7 +48,8 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currencyCode,
-      minimumFractionDigits: 2,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(num);
   };
 
@@ -134,10 +135,12 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   );
 
   const totalAllocated = monthlyData?.expensesAmount || 0;
-  const totalSpent = allSpending.reduce(
-    (sum, spending) => sum + (spending.totalSpending || spending.amount || 0),
-    0,
-  );
+  const totalSpent = allSpending
+    .filter((s) => s.category !== "Unallocated")
+    .reduce(
+      (sum, spending) => sum + (spending.totalSpending || spending.amount || 0),
+      0,
+    );
   const totalRemaining = totalAllocated - totalSpent;
 
   // Calculate total spending for each category
@@ -184,10 +187,12 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   const generatePDF = async () => {
     try {
       const todayDate = new Date().toLocaleDateString();
-      const totalTxnCosts = allSpending.reduce(
-        (sum, s) => sum + (s.transactionCosts || 0),
-        0,
-      );
+      const totalTxnCosts = allSpending
+        .filter((s) => s.category !== "Unallocated")
+        .reduce(
+          (sum, s) => sum + (s.transactionCosts || 0),
+          0,
+        );
       let tableHTML = "";
 
       expenses.forEach((expense) => {
