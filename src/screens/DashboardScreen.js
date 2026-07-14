@@ -667,9 +667,6 @@ export default function DashboardScreen({ navigation }) {
         ]}
       >
         <ActivityIndicator size="large" color={theme.colors.tabBarActive} />
-        <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>
-          Loading monthly data...
-        </Text>
       </View>
     );
   }

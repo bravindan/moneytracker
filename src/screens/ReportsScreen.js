@@ -35,6 +35,7 @@ const ReportsScreen = ({ navigation, route }) => {
   const [printing, setPrinting] = useState(false);
   const [reportMode, setReportMode] = useState("monthly"); // 'monthly' | 'quarterly' | 'annual' | 'custom'
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedQuarter, setSelectedQuarter] = useState(Math.floor(new Date().getMonth() / 3) + 1);
   const [customStartMonth, setCustomStartMonth] = useState("");
@@ -348,9 +349,6 @@ const ReportsScreen = ({ navigation, route }) => {
         ]}
       >
         <ActivityIndicator size="large" color={theme.colors.tabBarActive} />
-        <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>
-          Generating AI Report...
-        </Text>
       </View>
     );
   }
@@ -727,7 +725,7 @@ const ReportsScreen = ({ navigation, route }) => {
         </Text>
 
         {/* Dynamic AI Recommendations */}
-        <View
+        <TouchableOpacity
           style={[
             styles.insightCard,
             {
@@ -736,12 +734,13 @@ const ReportsScreen = ({ navigation, route }) => {
               borderWidth: 1,
             },
           ]}
+          onPress={() => setShowRecommendations(!showRecommendations)}
+          activeOpacity={0.8}
         >
           <View
             style={{
               flexDirection: "row",
               alignItems: "center",
-              marginBottom: 16,
             }}
           >
             <Ionicons
@@ -755,25 +754,35 @@ const ReportsScreen = ({ navigation, route }) => {
                 fontSize: 18,
                 fontWeight: "bold",
                 color: theme.colors.text,
+                flex: 1,
               }}
             >
               AI Recommendations
             </Text>
+            <Ionicons
+              name={showRecommendations ? "chevron-up" : "chevron-down"}
+              size={20}
+              color={theme.colors.textSecondary}
+            />
           </View>
-          {recommendations.map((rec, idx) => (
-            <View key={idx} style={{ marginBottom: 12 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
-                <Ionicons name={rec.icon} size={16} color={rec.color} style={{ marginRight: 6 }} />
-                <Text style={{ fontWeight: "600", color: theme.colors.text, fontSize: 13 }}>
-                  {rec.title}
-                </Text>
-              </View>
-              <Text style={{ color: theme.colors.textSecondary, fontSize: 13, lineHeight: 18, marginLeft: 22 }}>
-                {rec.text}
-              </Text>
+          {showRecommendations && (
+            <View style={{ marginTop: 16 }}>
+              {recommendations.map((rec, idx) => (
+                <View key={idx} style={{ marginBottom: 12 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+                    <Ionicons name={rec.icon} size={16} color={rec.color} style={{ marginRight: 6 }} />
+                    <Text style={{ fontWeight: "600", color: theme.colors.text, fontSize: 13 }}>
+                      {rec.title}
+                    </Text>
+                  </View>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13, lineHeight: 18, marginLeft: 22 }}>
+                    {rec.text}
+                  </Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
+          )}
+        </TouchableOpacity>
 
         {/* Income Statement */}
         <View
