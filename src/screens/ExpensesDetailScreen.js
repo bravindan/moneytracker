@@ -11,6 +11,7 @@ import {
   Platform,
   Alert,
   KeyboardAvoidingView,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -53,6 +54,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
 
   // State for dynamic data
   const [expenses, setExpenses] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(
     route?.params?.selectedMonth || getCurrentMonth(),
   ); // YYYY-MM format
@@ -72,45 +74,48 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   const [pickerMonthDate, setPickerMonthDate] = useState(new Date());
 
   // Load expenses data from database
-  useEffect(() => {
-    const loadExpensesData = async () => {
-      try {
-        setLoading(true);
+  const loadExpensesData = useCallback(async () => {
+    try {
+      // Get monthly summary first to get total allocated amount
+      const data = await getMonthlySummary(user.uid, selectedMonth);
+      setMonthlyData(data);
+      const totalAllocatedAmount = data?.expensesAmount || 0;
 
-        // Get monthly summary first to get total allocated amount
-        const data = await getMonthlySummary(user.uid, selectedMonth);
-        setMonthlyData(data);
-        const totalAllocatedAmount = data?.expensesAmount || 0;
+      // Get expenses from dedicated expenses collection
+      const expensesData = await getExpenses(user.uid, selectedMonth);
 
-        // Get expenses from dedicated expenses collection
-        const expensesData = await getExpenses(user.uid, selectedMonth);
+      // Get all spending records
+      const spendingData = await getSpending(user.uid, selectedMonth);
+      setAllSpending(spendingData);
 
-        // Get all spending records
-        const spendingData = await getSpending(user.uid, selectedMonth);
-        setAllSpending(spendingData);
+      // Calculate percentages based on total allocated amount from monthly summary
+      const expensesList = expensesData.map((expense) => ({
+        ...expense,
+        percentage:
+          totalAllocatedAmount > 0
+            ? ((expense.amount / totalAllocatedAmount) * 100).toFixed(1)
+            : 0,
+      }));
 
-        // Calculate percentages based on total allocated amount from monthly summary
-        const expensesList = expensesData.map((expense) => ({
-          ...expense,
-          percentage:
-            totalAllocatedAmount > 0
-              ? ((expense.amount / totalAllocatedAmount) * 100).toFixed(1)
-              : 0,
-        }));
-
-        setExpenses(expensesList);
-      } catch (error) {
-        console.error("Failed to load expenses data:", error);
-        setExpenses([]);
-        setMonthlyData(null);
-        setAllSpending([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadExpensesData();
+      setExpenses(expensesList);
+    } catch (error) {
+      console.error("Failed to load expenses data:", error);
+      setExpenses([]);
+      setMonthlyData(null);
+      setAllSpending([]);
+    }
   }, [user.uid, selectedMonth]);
+
+  useEffect(() => {
+    setLoading(true);
+    loadExpensesData().finally(() => setLoading(false));
+  }, [loadExpensesData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadExpensesData();
+    setRefreshing(false);
+  }, [loadExpensesData]);
 
   const fetchFreshSpending = useCallback(async () => {
     try {
@@ -412,7 +417,12 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+          }
+        >
           {/* Summary */}
           <View
             style={[

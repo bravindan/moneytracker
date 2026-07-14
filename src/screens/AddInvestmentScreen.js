@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -38,6 +39,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [investments, setInvestments] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(
     route?.params?.selectedMonth || getCurrentMonth(),
@@ -118,6 +120,12 @@ const AddInvestmentScreen = ({ navigation, route }) => {
       console.error("Failed to load investments:", error);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([loadInvestments(), loadMonthlyData()]);
+    setRefreshing(false);
+  }, [uid, selectedMonth]);
 
   const resetForm = () => {
     setPlatform("");
@@ -387,6 +395,9 @@ const AddInvestmentScreen = ({ navigation, route }) => {
           scrollEnabled={!showCategoryDropdown}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+          }
         >
           {/* Add Investment Form */}
           <View

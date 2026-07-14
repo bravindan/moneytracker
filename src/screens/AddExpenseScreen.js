@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -63,6 +64,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
   ]);
 
   // Form state
+  const [refreshing, setRefreshing] = useState(false);
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(
@@ -125,6 +127,25 @@ const AddExpenseScreen = ({ navigation, route }) => {
     };
 
     loadExpensesData();
+  }, [user.uid, selectedMonth]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const expensesData = await getExpenses(user.uid, selectedMonth);
+      const sorted = expensesData.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+      setExpenses(sorted);
+      const monthlyData = await getMonthlySummary(user.uid, selectedMonth);
+      setAllocatedAmount(monthlyData?.expensesAmount || 0);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setRefreshing(false);
+    }
   }, [user.uid, selectedMonth]);
 
   // Calculate allocation percentage based on overall expense allocation
@@ -586,6 +607,9 @@ const AddExpenseScreen = ({ navigation, route }) => {
                   renderItem={renderExpenseItem}
                   keyExtractor={(item) => item.id}
                   scrollEnabled={false}
+                  refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+                  }
                 />
               </View>
             )}

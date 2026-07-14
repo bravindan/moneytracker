@@ -9,6 +9,7 @@ import {
   Alert,
   Modal,
   TextInput,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,6 +33,7 @@ const ReportsScreen = ({ navigation, route }) => {
   const user = getCurrentUser();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [reportMode, setReportMode] = useState("monthly"); // 'monthly' | 'quarterly' | 'annual' | 'custom'
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
@@ -91,6 +93,12 @@ const ReportsScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
   }, [fetchData]);
 
   const getMonthsForPeriod = useCallback(() => {
@@ -706,6 +714,9 @@ const ReportsScreen = ({ navigation, route }) => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: 16 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+        }
       >
         <Text
           style={{

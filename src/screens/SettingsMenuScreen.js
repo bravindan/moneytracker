@@ -15,6 +15,12 @@ const SettingsMenuScreen = ({ navigation }) => {
       screen: 'Profile',
     },
     {
+      title: 'Notifications',
+      subtitle: 'Set spending reminders and alerts',
+      icon: 'notifications-outline',
+      screen: 'Notifications',
+    },
+    {
       title: 'Currency',
       subtitle: 'Select your preferred currency',
       icon: 'cash-outline',

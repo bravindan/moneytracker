@@ -7,6 +7,7 @@ import {
   StyleSheet,
   StatusBar,
   FlatList,
+  RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -57,6 +58,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   const [spendingList, setSpendingList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [item, setItem] = useState("");
   const [amount, setAmount] = useState("");
@@ -238,41 +240,45 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   };
 
   // Load spending data for the specific category or unallocated spend
+  const loadSpendingData = useCallback(async () => {
+    try {
+      let spendingData = [];
+      if (isUnallocated) {
+        const allSpending = await getSpending(user.uid, selectedMonth);
+        spendingData = allSpending.filter((s) => s.category === "Unallocated");
+      } else if (category) {
+        spendingData = await getSpendingByCategory(
+          user.uid,
+          category,
+          selectedMonth,
+        );
+      }
+      const sorted = spendingData.sort((a, b) => {
+        const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date || 0);
+        const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date || 0);
+        return dateB - dateA;
+      });
+      setSpendingList(sorted);
+    } catch (error) {
+      console.error("Failed to load spending data:", error);
+      setSpendingList([]);
+    }
+  }, [user.uid, category, selectedMonth, isUnallocated]);
+
   useFocusEffect(
     useCallback(() => {
-      const loadSpendingData = async () => {
-        try {
-          setLoading(true);
-          let spendingData = [];
-          if (isUnallocated) {
-            const allSpending = await getSpending(user.uid, selectedMonth);
-            spendingData = allSpending.filter((s) => s.category === "Unallocated");
-          } else if (category) {
-            spendingData = await getSpendingByCategory(
-              user.uid,
-              category,
-              selectedMonth,
-            );
-          }
-          const sorted = spendingData.sort((a, b) => {
-            const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date || 0);
-            const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date || 0);
-            return dateB - dateA;
-          });
-          setSpendingList(sorted);
-        } catch (error) {
-          console.error("Failed to load spending data:", error);
-          setSpendingList([]);
-        } finally {
-          setLoading(false);
-        }
-      };
-
       if (isUnallocated || category) {
-        loadSpendingData();
+        setLoading(true);
+        loadSpendingData().finally(() => setLoading(false));
       }
-    }, [user.uid, category, selectedMonth, isUnallocated])
+    }, [loadSpendingData, isUnallocated, category])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadSpendingData();
+    setRefreshing(false);
+  }, [loadSpendingData]);
 
   const renderSpendingItem = ({ item: spending }) => (
     <View
@@ -455,6 +461,9 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
             renderItem={renderSpendingItem}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContainer}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+            }
           />
         </>
       )}
