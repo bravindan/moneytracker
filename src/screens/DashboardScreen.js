@@ -23,6 +23,7 @@ import {
   getInvestments,
   deleteMonthlySummary,
   addSpending,
+  updateUserProfile,
 } from "../services/firestoreService";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
@@ -435,6 +436,9 @@ export default function DashboardScreen({ navigation }) {
   const [investments, setInvestments] = useState([]);
   const [showRecordMenu, setShowRecordMenu] = useState(false);
 
+  // Auto month switch
+  const [autoMonthSwitch, setAutoMonthSwitch] = useState(true);
+
   // Unallocated spending modal state
   const [showUnallocatedModal, setShowUnallocatedModal] = useState(false);
   const [unallocatedItem, setUnallocatedItem] = useState("");
@@ -448,6 +452,7 @@ export default function DashboardScreen({ navigation }) {
     try {
       const data = await getUserProfile(uid);
       setProfile(data);
+      if (data?.autoMonthSwitch !== undefined) setAutoMonthSwitch(data.autoMonthSwitch);
     } catch (error) {
       console.error("Failed to fetch profile:", error);
     } finally {
@@ -493,6 +498,16 @@ export default function DashboardScreen({ navigation }) {
       fetchMonthlyData();
     }, [fetchProfile, fetchMonthlyData]),
   );
+
+  // Auto-switch to current month when toggle is ON
+  useEffect(() => {
+    if (autoMonthSwitch) {
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      if (selectedMonth !== currentMonth) {
+        setSelectedMonth(currentMonth);
+      }
+    }
+  }, [autoMonthSwitch]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -583,6 +598,18 @@ export default function DashboardScreen({ navigation }) {
     }
     setSelectedMonth(`${newYear}-${String(newMonth).padStart(2, "0")}`);
     setLoading(true);
+  };
+
+  const toggleAutoMonthSwitch = async () => {
+    const newValue = !autoMonthSwitch;
+    setAutoMonthSwitch(newValue);
+    if (uid) {
+      try {
+        await updateUserProfile(uid, { autoMonthSwitch: newValue });
+      } catch (e) {
+        console.error("Failed to save setting:", e);
+      }
+    }
   };
 
   const handleEditRecord = () => {
@@ -927,6 +954,45 @@ export default function DashboardScreen({ navigation }) {
               ›
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={toggleAutoMonthSwitch}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginLeft: 8,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 8,
+              backgroundColor: autoMonthSwitch ? theme.colors.tabBarActive + "20" : "transparent",
+            }}
+          >
+            <View
+              style={{
+                width: 36,
+                height: 20,
+                borderRadius: 10,
+                backgroundColor: autoMonthSwitch ? theme.colors.tabBarActive : theme.colors.border,
+                justifyContent: "center",
+                paddingHorizontal: 2,
+              }}
+            >
+              <View
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  backgroundColor: "#fff",
+                  alignSelf: autoMonthSwitch ? "flex-end" : "flex-start",
+                }}
+              />
+            </View>
+            <Ionicons
+              name="sync-outline"
+              size={14}
+              color={autoMonthSwitch ? theme.colors.tabBarActive : theme.colors.textSecondary}
+              style={{ marginLeft: 4 }}
+            />
+          </TouchableOpacity>
           {!monthlyData && (
             <TouchableOpacity
               style={[
@@ -949,6 +1015,18 @@ export default function DashboardScreen({ navigation }) {
             />
           </TouchableOpacity>
         </View>
+        <Text
+          style={{
+            fontSize: 11,
+            color: theme.colors.textSecondary,
+            textAlign: "center",
+            marginTop: 4,
+          }}
+        >
+          {autoMonthSwitch
+            ? "Auto-switch ON — app opens to current month"
+            : "Auto-switch OFF — stays on selected month"}
+        </Text>
       </View>
 
       {/* Scrollable Content */}
