@@ -1520,26 +1520,81 @@ export default function DashboardScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             </View>
-            <Text
-              style={[styles.cardValue, { color: theme.colors.text }]}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >
-              {showBalanceAmount ? fmt(financialData.balance) : "••••••"}
-            </Text>
-            <Text
-              style={[
-                styles.cardSubtitle,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              {financialData.income > 0
-                ? Math.round(
-                    (financialData.balance / financialData.income) * 100,
-                  )
-                : 0}
-              % of income
-            </Text>
+
+            {(() => {
+              const allocated = monthlyData?.balance || 0;
+              const spent = allSpending
+                .filter((s) => s.category === "Unallocated")
+                .reduce((sum, s) => sum + (s.totalSpending || s.amount || 0), 0);
+              const remaining = allocated - spent;
+              const allocPct = financialData.income > 0
+                ? Math.round((allocated / financialData.income) * 100)
+                : 0;
+              const spentPct = allocated > 0
+                ? Math.round((spent / allocated) * 100)
+                : 0;
+              const remainPct = allocated > 0
+                ? Math.round((Math.abs(remaining) / allocated) * 100)
+                : 0;
+              return (
+                <View style={styles.expenseSummary}>
+                  <View style={styles.summaryRow}>
+                    <Text
+                      style={[styles.summaryLabel, { color: theme.colors.textSecondary, flex: 1 }]}
+                    >
+                      Allocated
+                      {showBalanceAmount && (
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                          {" "}({allocPct}% of income)
+                        </Text>
+                      )}:
+                    </Text>
+                    <Text
+                      style={[styles.summaryValue, { color: theme.colors.text }]}
+                    >
+                      {showBalanceAmount ? fmt(allocated) : "•••••"}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text
+                      style={[styles.summaryLabel, { color: theme.colors.textSecondary, flex: 1 }]}
+                    >
+                      Spent
+                      {showBalanceAmount && (
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                          {" "}({spentPct}% of alloc)
+                        </Text>
+                      )}:
+                    </Text>
+                    <Text
+                      style={[styles.summaryValue, { color: theme.colors.text }]}
+                    >
+                      {showBalanceAmount ? fmt(spent) : "•••••"}
+                    </Text>
+                  </View>
+                  <View style={[styles.summaryRow, styles.balanceRow]}>
+                    <Text
+                      style={[styles.summaryLabel, { color: theme.colors.textSecondary, flex: 1 }]}
+                    >
+                      Remaining
+                      {showBalanceAmount && (
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                          {" "}({remainPct}%)
+                        </Text>
+                      )}:
+                    </Text>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        { color: remaining >= 0 ? "#10b981" : "#ef4444" },
+                      ]}
+                    >
+                      {showBalanceAmount ? fmt(remaining) : "•••••"}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
           </View>
 
           {/* ── Summary ── */}
