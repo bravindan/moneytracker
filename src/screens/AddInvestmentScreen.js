@@ -411,41 +411,32 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.allocatedAmountLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Allocated Amount
-              </Text>
-              <Text
-                style={[
-                  styles.allocatedAmountValue,
-                  { color: theme.colors.text },
-                ]}
-              >
-                KES {allocatedAmount.toLocaleString()}
-              </Text>
               <View style={styles.summaryRow}>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, alignItems: "center" }}>
                   <Text
                     style={[
                       styles.allocatedAmountLabel,
                       { color: theme.colors.textSecondary },
                     ]}
                   >
-                    Budgeted
+                    Allocated
                   </Text>
                   <Text
                     style={[
                       styles.allocatedAmountValue,
-                      { color: theme.colors.text },
+                      { color: theme.colors.tabBarActive },
                     ]}
                   >
                     KES {allocatedAmount.toLocaleString()}
                   </Text>
                 </View>
+                <View
+                  style={{
+                    width: 1,
+                    backgroundColor: theme.colors.border,
+                    marginVertical: 4,
+                  }}
+                />
                 <View style={{ flex: 1, alignItems: "center" }}>
                   <Text
                     style={[
@@ -464,14 +455,21 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                     KES {totalOutlay.toLocaleString()}
                   </Text>
                 </View>
-                <View style={{ flex: 1, alignItems: "flex-end" }}>
+                <View
+                  style={{
+                    width: 1,
+                    backgroundColor: theme.colors.border,
+                    marginVertical: 4,
+                  }}
+                />
+                <View style={{ flex: 1, alignItems: "center" }}>
                   <Text
                     style={[
                       styles.allocatedAmountLabel,
                       { color: theme.colors.textSecondary },
                     ]}
                   >
-                    Pending
+                    Balance
                   </Text>
                   <Text
                     style={[
@@ -481,7 +479,6 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                           pendingBalance > 0
                             ? theme.colors.tabBarActive
                             : "#ef4444",
-                        fontWeight: "bold",
                       },
                     ]}
                   >
@@ -776,20 +773,23 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   allocatedAmountContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
     marginBottom: 16,
   },
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   allocatedAmountLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "500",
+    marginBottom: 4,
   },
   allocatedAmountValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "bold",
   },
   formTitle: {

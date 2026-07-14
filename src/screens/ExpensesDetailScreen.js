@@ -400,71 +400,77 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           {/* Summary */}
           <View
-            style={[styles.summaryCard, { backgroundColor: theme.colors.card }]}
+            style={[
+              styles.summaryCard,
+              {
+                backgroundColor: theme.colors.background,
+                borderColor: theme.colors.border,
+              },
+            ]}
           >
-            <Text
-              style={[
-                styles.summaryTitle,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              Expense Summary
-            </Text>
             <View style={styles.summaryRow}>
-              <Text
-                style={[
-                  styles.summaryLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Total Allocated:
-              </Text>
-              <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-                KES{" "}
-                {totalAllocated.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text
-                style={[
-                  styles.summaryLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Total Spent:
-              </Text>
-              <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-                KES{" "}
-                {totalSpent.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text
-                style={[
-                  styles.summaryLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Remaining:
-              </Text>
-              <Text
-                style={[
-                  styles.summaryValue,
-                  totalRemaining >= 0 ? styles.positive : styles.negative,
-                ]}
-              >
-                KES{" "}
-                {totalRemaining.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text
+                  style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}
+                >
+                  Allocated
+                </Text>
+                <Text
+                  style={[styles.summaryValue, { color: theme.colors.tabBarActive }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  KES {totalAllocated.toLocaleString()}
+                </Text>
+              </View>
+              <View
+                style={{
+                  width: 1,
+                  backgroundColor: theme.colors.border,
+                  marginVertical: 4,
+                }}
+              />
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text
+                  style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}
+                >
+                  Spent
+                </Text>
+                <Text
+                  style={[styles.summaryValue, { color: theme.colors.text }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  KES {totalSpent.toLocaleString()}
+                </Text>
+              </View>
+              <View
+                style={{
+                  width: 1,
+                  backgroundColor: theme.colors.border,
+                  marginVertical: 4,
+                }}
+              />
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text
+                  style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}
+                >
+                  Remaining
+                </Text>
+                <Text
+                  style={[
+                    styles.summaryValue,
+                    {
+                      color:
+                        totalRemaining >= 0 ? "#10b981" : "#ef4444",
+                    },
+                  ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  KES {totalRemaining.toLocaleString()}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -1040,28 +1046,24 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   summaryCard: {
-    borderRadius: 12,
     padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
     marginBottom: 20,
-  },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 12,
   },
   summaryRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    justifyContent: "space-between",
   },
   summaryLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "500",
+    marginBottom: 4,
   },
   summaryValue: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "bold",
   },
   expenseCard: {
     borderRadius: 12,

@@ -51,7 +51,7 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
     removable: key === 'custom',
   });
   const [allocations, setAllocations] = useState([
-    makeAlloc('savingsInvestment', 'Savings & Investments'),
+    makeAlloc('savingsInvestment', 'Investments'),
     makeAlloc('expenses', 'Expenses'),
   ]);
 
@@ -274,11 +274,11 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
       incomeSources: cleanedSources,
       allocations: cleanedAllocations,
       // Legacy fields kept in sync so existing dashboard/report math works
-      savingsPercent: siPercent / 2,
-      investmentPercent: siPercent / 2,
+      savingsPercent: 0,
+      investmentPercent: siPercent,
       expensesPercent: ex?.percent || 0,
-      savingsAmount: siAmount / 2,
-      investmentAmount: siAmount / 2,
+      savingsAmount: 0,
+      investmentAmount: siAmount,
       expensesAmount: ex?.amount || 0,
       balance: remainingBalance,
     };

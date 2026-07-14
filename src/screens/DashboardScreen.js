@@ -221,12 +221,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  balanceRow: {
-    borderTopWidth: 1,
-    borderTopColor: "transparent",
-    paddingTop: 8,
-    marginTop: 4,
-  },
+  balanceRow: {},
   summaryLabel: {
     fontSize: 14,
     fontWeight: "500",
@@ -239,9 +234,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   summaryPercentage: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
-    marginTop: 2,
   },
   cardGreen: {
     padding: 16,
@@ -277,6 +271,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     flexShrink: 0,
     lineHeight: 24,
+    minHeight: 24,
   },
   cardSubtitle: {
     fontSize: 11,
@@ -505,7 +500,6 @@ export default function DashboardScreen({ navigation }) {
         income: monthlyData.income || 0,
         balance: monthlyData.balance || 0,
         savingsInvestments:
-          (monthlyData.savingsAmount || 0) +
           (monthlyData.investmentAmount || 0),
         expenses: {
           allocated: monthlyData.expensesAmount || 0,
@@ -886,15 +880,17 @@ export default function DashboardScreen({ navigation }) {
               ›
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.addRecordButton,
-              { backgroundColor: theme.colors.tabBarActive },
-            ]}
-            onPress={() => navigation.navigate("MonthlyRecord", { month: selectedMonth })}
-          >
-            <Text style={styles.addRecordButtonText}>+ Add Record</Text>
-          </TouchableOpacity>
+          {!monthlyData && (
+            <TouchableOpacity
+              style={[
+                styles.addRecordButton,
+                { backgroundColor: theme.colors.tabBarActive },
+              ]}
+              onPress={() => navigation.navigate("MonthlyRecord", { month: selectedMonth })}
+            >
+              <Text style={styles.addRecordButtonText}>+ Add Record</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.recordMenuButton, { borderColor: theme.colors.border }]}
             onPress={() => setShowRecordMenu(true)}
@@ -957,9 +953,8 @@ export default function DashboardScreen({ navigation }) {
             >
               {showIncomeAmount ? fmt(financialData.income) : "••••••"}
             </Text>
-            {showIncomeAmount &&
-              Array.isArray(monthlyData?.incomeSources) &&
-              monthlyData.incomeSources.length > 1 && (
+            {Array.isArray(monthlyData?.incomeSources) &&
+              monthlyData.incomeSources.length > 0 && (
                 <View
                   style={{
                     marginTop: 12,
@@ -978,26 +973,34 @@ export default function DashboardScreen({ navigation }) {
                   >
                     Income Sources:
                   </Text>
-                  {monthlyData.incomeSources.map((src, idx) => (
-                    <View
-                      key={idx}
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        marginBottom: 4,
-                      }}
-                    >
-                      <Text
+                  {monthlyData.incomeSources.map((src, idx) => {
+                    const pct =
+                      financialData.income > 0
+                        ? Math.round(((src.amount || 0) / financialData.income) * 100)
+                        : 0;
+                    return (
+                      <View
+                        key={idx}
                         style={{
-                          fontSize: 13,
-                          color: theme.colors.text,
-                          flex: 1,
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: 6,
                         }}
-                        numberOfLines={1}
                       >
-                        {src.name}
-                      </Text>
-                      <View style={{ alignItems: "flex-end" }}>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            color: theme.colors.text,
+                            flex: 1,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {src.name}
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 11, visibility: showIncomeAmount ? 'visible' : 'hidden' }}>
+                            {" "}({pct}%)
+                          </Text>
+                        </Text>
                         <Text
                           style={{
                             fontSize: 13,
@@ -1005,24 +1008,11 @@ export default function DashboardScreen({ navigation }) {
                             fontWeight: "500",
                           }}
                         >
-                          {fmt(src.amount || 0)}
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: theme.colors.textSecondary,
-                          }}
-                        >
-                          {financialData.income > 0
-                            ? Math.round(
-                                ((src.amount || 0) / financialData.income) * 100,
-                              )
-                            : 0}
-                          %
+                          {showIncomeAmount ? fmt(src.amount || 0) : "••••••"}
                         </Text>
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
           </View>
@@ -1091,113 +1081,92 @@ export default function DashboardScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             </View>
-            <Text
-              style={[styles.cardValue, { color: theme.colors.text }]}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >
-              {showSavingsAmount
-                ? fmt(financialData.savingsInvestments)
-                : "••••••"}
-            </Text>
-            {showSavingsAmount && (
-              <Text
-                style={[
-                  styles.cardSubtitle,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                {financialData.income > 0
-                  ? Math.round(
-                      (financialData.savingsInvestments /
-                        financialData.income) *
-                        100,
-                    )
-                  : 0}
-                % of income
-              </Text>
-            )}
-            {investments.length > 0 && (
-              <View
-                style={{
-                  marginTop: 12,
-                  paddingTop: 12,
-                  borderTopWidth: 1,
-                  borderTopColor: theme.colors.border,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: theme.colors.textSecondary,
-                    marginBottom: 8,
-                    fontWeight: "600",
-                  }}
-                >
-                  Portfolio Overview:
-                </Text>
-                {investments.slice(0, 3).map((inv, idx) => (
-                  <View
-                    key={idx}
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      marginBottom: 4,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        color: theme.colors.text,
-                        flex: 1,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {inv.platform} ({inv.category})
-                    </Text>
-                    <View style={{ alignItems: "flex-end" }}>
+
+            <View style={styles.expenseSummary}>
+              {(() => {
+                const allocated = monthlyData?.investmentAmount || 0;
+                const invested = investments.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+                const balance = allocated - invested;
+                const allocPct = financialData.income > 0
+                  ? Math.round((allocated / financialData.income) * 100)
+                  : 0;
+                const investPct = allocated > 0
+                  ? Math.round((invested / allocated) * 100)
+                  : 0;
+                const balancePct = allocated > 0
+                  ? Math.round((Math.abs(balance) / allocated) * 100)
+                  : 0;
+                return (
+                  <>
+                    <View style={styles.summaryRow}>
                       <Text
-                        style={{
-                          fontSize: 13,
-                          color: theme.colors.text,
-                          fontWeight: "500",
-                        }}
+                        style={[
+                          styles.summaryLabel,
+                          { color: theme.colors.textSecondary, flex: 1 },
+                        ]}
                       >
-                        {showSavingsAmount ? fmt(inv.amount) : "•••"}
+                        Allocated
+                        {showSavingsAmount && (
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                            {" "}({allocPct}% of income)
+                          </Text>
+                        )}:
                       </Text>
-                      {showSavingsAmount && (
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: theme.colors.textSecondary,
-                          }}
-                        >
-                          {financialData.savingsInvestments > 0
-                            ? Math.round(
-                                ((inv.amount || 0) /
-                                  financialData.savingsInvestments) *
-                                  100,
-                              )
-                            : 0}
-                          %
-                        </Text>
-                      )}
+                      <Text
+                        style={[styles.summaryValue, { color: theme.colors.text }]}
+                      >
+                        {showSavingsAmount ? fmt(allocated) : "•••••"}
+                      </Text>
                     </View>
-                  </View>
-                ))}
-                {investments.length > 3 && (
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: theme.colors.tabBarActive,
-                      marginTop: 4,
-                    }}
-                  >
-                    + {investments.length - 3} more...
-                  </Text>
-                )}
-              </View>
-            )}
+                    <View style={styles.summaryRow}>
+                      <Text
+                        style={[
+                          styles.summaryLabel,
+                          { color: theme.colors.textSecondary, flex: 1 },
+                        ]}
+                      >
+                        Invested
+                        {showSavingsAmount && (
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                            {" "}({investPct}% of alloc)
+                          </Text>
+                        )}:
+                      </Text>
+                      <Text
+                        style={[styles.summaryValue, { color: theme.colors.text }]}
+                      >
+                        {showSavingsAmount ? fmt(invested) : "•••••"}
+                      </Text>
+                    </View>
+                    <View style={[styles.summaryRow, styles.balanceRow]}>
+                      <Text
+                        style={[
+                          styles.summaryLabel,
+                          { color: theme.colors.textSecondary, flex: 1 },
+                        ]}
+                      >
+                        Balance
+                        {showSavingsAmount && (
+                          <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                            {" "}({balancePct}%)
+                          </Text>
+                        )}:
+                      </Text>
+                      <Text
+                        style={[
+                          styles.summaryValue,
+                          {
+                            color: balance >= 0 ? "#10b981" : "#ef4444",
+                          },
+                        ]}
+                      >
+                        {showSavingsAmount ? fmt(balance) : "•••••"}
+                      </Text>
+                    </View>
+                  </>
+                );
+              })()}
+            </View>
           </View>
 
           {/* ── Expenses Overview ── */}
@@ -1270,106 +1239,83 @@ export default function DashboardScreen({ navigation }) {
                 <Text
                   style={[
                     styles.summaryLabel,
-                    { color: theme.colors.textSecondary },
+                    { color: theme.colors.textSecondary, flex: 1 },
                   ]}
                 >
-                  Allocated:
-                </Text>
-                <View style={styles.amountWithPercentage}>
-                  <Text
-                    style={[styles.summaryValue, { color: theme.colors.text }]}
-                  >
-                    {showExpenseAmount
-                      ? fmt(financialData.expenses.allocated)
-                      : "•••••"}
-                  </Text>
+                  Allocated
                   {showExpenseAmount && (
-                    <Text
-                      style={[
-                        styles.summaryPercentage,
-                        { color: theme.colors.textSecondary },
-                      ]}
-                    >
-                      (
-                      {financialData.income > 0
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                      {" "}({financialData.income > 0
                         ? Math.round(
                             (financialData.expenses.allocated /
                               financialData.income) *
                               100,
                           )
-                        : 0}
-                      % of income)
+                        : 0}% of income)
                     </Text>
-                  )}
-                </View>
+                  )}:
+                </Text>
+                <Text
+                  style={[styles.summaryValue, { color: theme.colors.text }]}
+                >
+                  {showExpenseAmount
+                    ? fmt(financialData.expenses.allocated)
+                    : "•••••"}
+                </Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text
                   style={[
                     styles.summaryLabel,
-                    { color: theme.colors.textSecondary },
+                    { color: theme.colors.textSecondary, flex: 1 },
                   ]}
                 >
-                  Spent:
-                </Text>
-                <View style={styles.amountWithPercentage}>
-                  <Text
-                    style={[styles.summaryValue, { color: theme.colors.text }]}
-                  >
-                    {showExpenseAmount
-                      ? fmt(financialData.expenses.spent)
-                      : "•••••"}
-                  </Text>
+                  Spent
                   {showExpenseAmount && (
-                    <Text
-                      style={[
-                        styles.summaryPercentage,
-                        { color: theme.colors.textSecondary },
-                      ]}
-                    >
-                      ({Math.round(exactExpensePercentage)}%)
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                      {" "}({Math.round(exactExpensePercentage)}% of alloc)
                     </Text>
-                  )}
-                </View>
+                  )}:
+                </Text>
+                <Text
+                  style={[styles.summaryValue, { color: theme.colors.text }]}
+                >
+                  {showExpenseAmount
+                    ? fmt(financialData.expenses.spent)
+                    : "•••••"}
+                </Text>
               </View>
               <View style={[styles.summaryRow, styles.balanceRow]}>
                 <Text
                   style={[
                     styles.summaryLabel,
-                    { color: theme.colors.textSecondary },
+                    { color: theme.colors.textSecondary, flex: 1 },
                   ]}
                 >
-                  Remaining:
-                </Text>
-                <View style={styles.amountWithPercentage}>
-                  <Text
-                    style={[
-                      styles.summaryValue,
-                      {
-                        color:
-                          financialData.expenses.allocated -
-                            financialData.expenses.spent >=
-                          0
-                            ? "#10b981"
-                            : "#ef4444",
-                      },
-                    ]}
-                  >
-                    {showExpenseAmount
-                      ? fmt(financialData.expenses.remaining)
-                      : "•••••"}
-                  </Text>
+                  Remaining
                   {showExpenseAmount && (
-                    <Text
-                      style={[
-                        styles.summaryPercentage,
-                        { color: theme.colors.textSecondary },
-                      ]}
-                    >
-                      ({Math.round(100 - exactExpensePercentage)}%)
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                      {" "}({Math.round(100 - exactExpensePercentage)}%)
                     </Text>
-                  )}
-                </View>
+                  )}:
+                </Text>
+                <Text
+                  style={[
+                    styles.summaryValue,
+                    {
+                      color:
+                        financialData.expenses.allocated -
+                          financialData.expenses.spent >=
+                        0
+                          ? "#10b981"
+                          : "#ef4444",
+                    },
+                  ]}
+                >
+                  {showExpenseAmount
+                    ? fmt(financialData.expenses.remaining)
+                    : "•••••"}
+                </Text>
               </View>
             </View>
           </View>
