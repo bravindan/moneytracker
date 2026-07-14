@@ -57,31 +57,22 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     if (uid) {
-      loadInvestments();
-      loadMonthlyData();
+      loadData();
     }
   }, [uid, selectedMonth]);
 
-  const loadMonthlyData = async () => {
+  const loadData = async () => {
     try {
-      const monthlyData = await getMonthlySummary(uid, selectedMonth);
-      // Use same calculation as dashboard: savingsAmount + investmentAmount
-      const savingsInvestments =
-        (monthlyData?.savingsAmount || 0) +
-        (monthlyData?.investmentAmount || 0);
-      setAllocatedAmount(savingsInvestments);
+      const [monthlyData, invData] = await Promise.all([
+        getMonthlySummary(uid, selectedMonth),
+        getInvestments(uid, selectedMonth),
+      ]);
+      setAllocatedAmount(monthlyData?.investmentAmount || 0);
+      setInvestments(invData || []);
     } catch (error) {
-      console.error("Failed to load monthly data:", error);
+      console.error("Failed to load data:", error);
       setAllocatedAmount(0);
-    }
-  };
-
-  const loadInvestments = async () => {
-    try {
-      const data = await getInvestments(uid, selectedMonth);
-      setInvestments(data || []);
-    } catch (error) {
-      console.error("Failed to load investments:", error);
+      setInvestments([]);
     } finally {
       setLoading(false);
     }
@@ -89,11 +80,11 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([loadInvestments(), loadMonthlyData()]);
+    await loadData();
     setRefreshing(false);
   }, [uid, selectedMonth]);
 
-  const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
+  const totalInvested = investments.reduce((sum, inv) => sum + (inv.amount || 0), 0);
   const totalTransactionCosts = investments.reduce(
     (sum, inv) => sum + (inv.transactionCosts || 0),
     0,
@@ -423,7 +414,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
               Remaining:
             </Text>
             <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-              {fmt(Math.max(0, allocatedAmount - totalInvested))}
+              {fmt(Math.max(0, allocatedAmount - totalOutlay))}
             </Text>
           </View>
           <View style={styles.summaryRow}>
