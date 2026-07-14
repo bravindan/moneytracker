@@ -1210,7 +1210,10 @@ export default function DashboardScreen({ navigation }) {
             <View style={styles.expenseSummary}>
               {(() => {
                 const allocated = monthlyData?.investmentAmount || 0;
-                const invested = investments.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+                const invested = investments.reduce(
+                  (sum, inv) => sum + (inv.totalInvestment || inv.amount + (inv.transactionCosts || 0)),
+                  0,
+                );
                 const balance = allocated - invested;
                 const allocPct = financialData.income > 0
                   ? Math.round((allocated / financialData.income) * 100)
