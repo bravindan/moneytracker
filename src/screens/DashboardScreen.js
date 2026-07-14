@@ -18,7 +18,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { getCurrentUser, logoutUser } from "../services/authService";
 import {
   getMonthlySummary,
-  getMonthlySummaries,
   getUserProfile,
   getSpending,
   getInvestments,
@@ -494,11 +493,6 @@ export default function DashboardScreen({ navigation }) {
       fetchMonthlyData();
     }, [fetchProfile, fetchMonthlyData]),
   );
-
-  // Fetch monthly summary for selected month
-  useEffect(() => {
-    fetchMonthlyData();
-  }, [fetchMonthlyData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

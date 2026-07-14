@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Alert,
   StatusBar,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
@@ -76,7 +75,6 @@ const AddInvestmentScreen = ({ navigation, route }) => {
   };
 
   const [pendingBalance, setPendingBalance] = useState(0);
-  const [totalSpent, setTotalSpent] = useState(0);
 
   // Load investments data from database
   useEffect(() => {
@@ -329,20 +327,6 @@ const AddInvestmentScreen = ({ navigation, route }) => {
         </TouchableOpacity>
       </View>
     </View>
-  );
-
-  const renderCategoryItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.dropdownItem}
-      onPress={() => {
-        setCategory(item);
-        setShowCategoryDropdown(false);
-      }}
-    >
-      <Text style={[styles.dropdownItemText, { color: theme.colors.text }]}>
-        {item}
-      </Text>
-    </TouchableOpacity>
   );
 
   const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
@@ -846,9 +830,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  dropdownList: {
-    maxHeight: 240,
-  },
   dropdownScroll: {
     maxHeight: 240,
   },
@@ -860,10 +841,6 @@ const styles = StyleSheet.create({
   },
   dropdownItemText: {
     fontSize: 16,
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: "top",
   },
   addButton: {
     borderRadius: 8,
@@ -893,9 +870,6 @@ const styles = StyleSheet.create({
   totalAmount: {
     fontSize: 14,
     fontWeight: "600",
-  },
-  list: {
-    marginBottom: 16,
   },
   investmentItem: {
     flexDirection: "row",

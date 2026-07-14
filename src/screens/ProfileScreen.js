@@ -18,7 +18,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { getCurrentUser, changePassword, updateUserEmail, deleteCurrentUser } from '../services/authService';
 import { getUserProfile, updateUserProfile, deleteAllUserData } from '../services/firestoreService';
-import CustomAlert from '../components/CustomAlert';
 
 const ProfileScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -560,15 +559,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  profilePhotoPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
   avatarContainer: {
     width: 100,
     height: 100,
@@ -612,20 +602,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  infoBox: {
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 20,
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  infoText: {
-    fontSize: 14,
-    marginBottom: 4,
   },
   modalOverlay: {
     flex: 1,

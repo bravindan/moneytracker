@@ -239,9 +239,13 @@ export const addInvestment = (uid, data) =>
  * @returns {Promise<object[]>}
  */
 export const getInvestments = async (uid, month) => {
+  if (month) {
+    const q = query(investmentsCol(uid), where("month", "==", month));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
   const snap = await getDocs(investmentsCol(uid));
-  const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  return filterRecordsByMonth(records, month);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
 
 /**
@@ -284,9 +288,13 @@ export const addExpense = (uid, data) =>
  * @returns {Promise<object[]>}
  */
 export const getExpenses = async (uid, month) => {
+  if (month) {
+    const q = query(expensesCol(uid), where("month", "==", month));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
   const snap = await getDocs(expensesCol(uid));
-  const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  return filterRecordsByMonth(records, month);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
 
 /**
@@ -346,9 +354,13 @@ export const updateSpending = (uid, spendingId, updates) =>
  * @returns {Promise<object[]>}
  */
 export const getSpending = async (uid, month) => {
+  if (month) {
+    const q = query(spendingCol(uid), where("month", "==", month));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
   const snap = await getDocs(spendingCol(uid));
-  const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  return filterRecordsByMonth(records, month);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 };
 
 /**

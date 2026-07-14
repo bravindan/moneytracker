@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -18,8 +18,6 @@ import {
   updateSpending,
   addSpending,
   getSpending,
-  updateMonthlySummary,
-  getMonthlySummary,
   getUserProfile,
 } from "../services/firestoreService";
 import {
@@ -908,10 +906,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     flex: 1,
-  },
-  spendingDate: {
-    fontSize: 14,
-    color: "#666",
   },
   spendingDetails: {
     gap: 12,

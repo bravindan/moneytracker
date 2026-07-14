@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -31,6 +33,13 @@ const ReportsScreen = ({ navigation, route }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
+  const [reportMode, setReportMode] = useState("monthly"); // 'monthly' | 'quarterly' | 'annual' | 'custom'
+  const [showPeriodPicker, setShowPeriodPicker] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedQuarter, setSelectedQuarter] = useState(Math.floor(new Date().getMonth() / 3) + 1);
+  const [customStartMonth, setCustomStartMonth] = useState("");
+  const [customEndMonth, setCustomEndMonth] = useState("");
+  const [periodData, setPeriodData] = useState(null);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -82,6 +91,89 @@ const ReportsScreen = ({ navigation, route }) => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const getMonthsForPeriod = useCallback(() => {
+    const months = [];
+    if (reportMode === "quarterly") {
+      const startMonth = (selectedQuarter - 1) * 3 + 1;
+      for (let m = startMonth; m < startMonth + 3; m++) {
+        months.push(`${selectedYear}-${String(m).padStart(2, "0")}`);
+      }
+    } else if (reportMode === "annual") {
+      for (let m = 1; m <= 12; m++) {
+        months.push(`${selectedYear}-${String(m).padStart(2, "0")}`);
+      }
+    } else if (reportMode === "custom" && customStartMonth && customEndMonth) {
+      const [startYear, startM] = customStartMonth.split("-").map(Number);
+      const [endYear, endM] = customEndMonth.split("-").map(Number);
+      let y = startYear;
+      let m = startM;
+      while (y < endYear || (y === endYear && m <= endM)) {
+        months.push(`${y}-${String(m).padStart(2, "0")}`);
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+    }
+    return months;
+  }, [reportMode, selectedYear, selectedQuarter, customStartMonth, customEndMonth]);
+
+  const fetchPeriodData = useCallback(async () => {
+    if (!user?.uid || reportMode === "monthly") return;
+    const months = getMonthsForPeriod();
+    if (months.length === 0) return;
+
+    setLoading(true);
+    try {
+      const results = await Promise.all(
+        months.map(async (month) => {
+          const [summary, spendings, invs] = await Promise.all([
+            getMonthlySummary(user.uid, month),
+            getSpending(user.uid, month),
+            getInvestments(user.uid, month),
+          ]);
+          return { month, summary, spendings: spendings || [], investments: invs || [] };
+        })
+      );
+
+      // Aggregate data
+      const totalIncome = results.reduce((sum, r) => sum + (r.summary?.income || 0), 0);
+      const totalExpensesAllocated = results.reduce((sum, r) => sum + (r.summary?.expensesAmount || 0), 0);
+      const totalSpent = results.reduce((sum, r) => sum + r.spendings.reduce((s, sp) => s + (sp.totalSpending || sp.amount || 0), 0), 0);
+      const totalInvested = results.reduce((sum, r) => sum + r.investments.reduce((s, i) => s + (i.amount || 0), 0), 0);
+      const totalInvestmentCosts = results.reduce((sum, r) => sum + r.investments.reduce((s, i) => s + (i.transactionCosts || 0), 0), 0);
+      const allSpendings = results.flatMap(r => r.spendings);
+      const allInvestments = results.flatMap(r => r.investments);
+
+      // Category totals across period
+      const categoryTotals = {};
+      allSpendings.forEach((s) => {
+        categoryTotals[s.category] = (categoryTotals[s.category] || 0) + (s.totalSpending || s.amount || 0);
+      });
+
+      setPeriodData({
+        months,
+        totalIncome,
+        totalExpensesAllocated,
+        totalSpent,
+        totalInvested,
+        totalInvestmentCosts,
+        allSpendings,
+        allInvestments,
+        categoryTotals,
+        monthlyResults: results,
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.uid, reportMode, getMonthsForPeriod]);
+
+  useEffect(() => {
+    if (reportMode !== "monthly") {
+      fetchPeriodData();
+    }
+  }, [fetchPeriodData, reportMode]);
 
   const handlePrint = async () => {
     if (!reportData?.summary) return;
@@ -226,7 +318,7 @@ const ReportsScreen = ({ navigation, route }) => {
 
             <div class="insight-box">
               <div class="insight-title">Financial Health Score</div>
-              <p>${generateHealthSummary(summary, totalSpent, totalAllocated, savingsInvestments, balance, categoryTotals)}</p>
+              <p>${generateHealthSummary(summary, totalSpent, totalAllocated, savingsInvestments, balance, categoryTotals, currencyCode)}</p>
             </div>
 
             <p class="footer">Generated by MoneyTracker App — Your Personal Finance Companion</p>
@@ -500,6 +592,119 @@ const ReportsScreen = ({ navigation, route }) => {
         </TouchableOpacity>
       </View>
 
+      {/* Period Selector */}
+      <View style={[styles.periodSelector, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+        {[
+          { key: "monthly", label: "Monthly" },
+          { key: "quarterly", label: "Quarterly" },
+          { key: "annual", label: "Annual" },
+        ].map(({ key, label }) => (
+          <TouchableOpacity
+            key={key}
+            style={[
+              styles.periodButton,
+              reportMode === key && { backgroundColor: theme.colors.tabBarActive },
+            ]}
+            onPress={() => setReportMode(key)}
+          >
+            <Text
+              style={[
+                styles.periodButtonText,
+                { color: reportMode === key ? "#fff" : theme.colors.textSecondary },
+              ]}
+            >
+              {label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Period Configuration */}
+      {reportMode !== "monthly" && (
+        <View style={[styles.periodConfig, { backgroundColor: theme.colors.background }]}>
+          {reportMode === "quarterly" && (
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.periodConfigButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                onPress={() => setSelectedYear(y => y - 1)}
+              >
+                <Ionicons name="chevron-back" size={16} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+              <Text style={[styles.periodConfigText, { color: theme.colors.text }]}>{selectedYear}</Text>
+              <TouchableOpacity
+                style={[styles.periodConfigButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                onPress={() => setSelectedYear(y => y + 1)}
+              >
+                <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+              <View style={{ flexDirection: "row", gap: 4, marginLeft: 8 }}>
+                {[1, 2, 3, 4].map(q => (
+                  <TouchableOpacity
+                    key={q}
+                    style={[
+                      styles.quarterButton,
+                      {
+                        backgroundColor: selectedQuarter === q ? theme.colors.tabBarActive : theme.colors.card,
+                        borderColor: theme.colors.border,
+                      },
+                    ]}
+                    onPress={() => setSelectedQuarter(q)}
+                  >
+                    <Text style={{ color: selectedQuarter === q ? "#fff" : theme.colors.textSecondary, fontSize: 12, fontWeight: "600" }}>
+                      Q{q}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+          {reportMode === "annual" && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.periodConfigButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                onPress={() => setSelectedYear(y => y - 1)}
+              >
+                <Ionicons name="chevron-back" size={16} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+              <Text style={[styles.periodConfigText, { color: theme.colors.text }]}>{selectedYear}</Text>
+              <TouchableOpacity
+                style={[styles.periodConfigButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                onPress={() => setSelectedYear(y => y + 1)}
+              >
+                <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          )}
+          {reportMode === "custom" && (
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 }}>From</Text>
+                <TextInput
+                  style={[styles.periodInput, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="YYYY-MM"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={customStartMonth}
+                  onChangeText={setCustomStartMonth}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 }}>To</Text>
+                <TextInput
+                  style={[styles.periodInput, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="YYYY-MM"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={customEndMonth}
+                  onChangeText={setCustomEndMonth}
+                />
+              </View>
+            </View>
+          )}
+          <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 8 }}>
+            {getMonthsForPeriod().length} month(s) selected
+          </Text>
+        </View>
+      )}
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: 16 }}
@@ -512,7 +717,13 @@ const ReportsScreen = ({ navigation, route }) => {
             marginBottom: 16,
           }}
         >
-          {formatMonthName(selectedMonth)}
+          {reportMode === "monthly"
+            ? formatMonthName(selectedMonth)
+            : reportMode === "quarterly"
+              ? `Q${selectedQuarter} ${selectedYear}`
+              : reportMode === "annual"
+                ? `${selectedYear}`
+                : `${customStartMonth} to ${customEndMonth}`}
         </Text>
 
         {/* Dynamic AI Recommendations */}
@@ -713,7 +924,7 @@ const ReportsScreen = ({ navigation, route }) => {
   );
 };
 
-const generateHealthSummary = (summary, totalSpent, totalAllocated, savingsInvestments, balance, categoryTotals) => {
+const generateHealthSummary = (summary, totalSpent, totalAllocated, savingsInvestments, balance, categoryTotals, currencyCode = "KES") => {
   const income = summary.income || 0;
   if (income === 0) return "No income data to assess financial health.";
 
@@ -724,28 +935,40 @@ const generateHealthSummary = (summary, totalSpent, totalAllocated, savingsInves
   let score = 0;
   let factors = [];
 
-  // Budget adherence (30 points)
   if (utilization <= 100) { score += 30; factors.push("stayed within budget"); }
   else if (utilization <= 110) { score += 15; factors.push("slightly over budget"); }
 
-  // Savings rate (30 points)
   if (savingsRate >= 20) { score += 30; factors.push(`${savingsRate.toFixed(0)}% savings rate`); }
   else if (savingsRate >= 10) { score += 15; factors.push(`${savingsRate.toFixed(0)}% savings rate`); }
 
-  // Expense to income ratio (20 points)
   if (expenseRate <= 50) { score += 20; }
   else if (expenseRate <= 70) { score += 10; }
 
-  // Unallocated balance (20 points)
   if (balance > 0) { score += 20; }
   else if (balance === 0) { score += 10; }
-
-  const total = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
 
   let grade = score >= 80 ? "Excellent" : score >= 60 ? "Good" : score >= 40 ? "Fair" : "Needs Improvement";
   let emoji = score >= 80 ? "🌟" : score >= 60 ? "✅" : score >= 40 ? "⚠️" : "📉";
 
-  return `${emoji} Financial Health: ${grade} (${score}/100). ${factors.length > 0 ? "Key strengths: " + factors.join(", ") + "." : ""} Total cash flow: ${income > 0 ? fmt(income - totalSpent) : "N/A"}.`;
+  const fmtCurrency = (val) => {
+    const num = typeof val === "number" ? val : parseFloat(val) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+    }).format(num);
+  };
+
+  return `${emoji} Financial Health: ${grade} (${score}/100). ${factors.length > 0 ? "Key strengths: " + factors.join(", ") + "." : ""} Total cash flow: ${income > 0 ? fmtCurrency(income - totalSpent) : "N/A"}.`;
+};
+
+const fmtModule = (val, currencyCode = "KES") => {
+  const num = typeof val === "number" ? val : parseFloat(val) || 0;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currencyCode,
+    minimumFractionDigits: 2,
+  }).format(num);
 };
 
 const fmt = (val) => {
@@ -766,6 +989,55 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     textAlign: "center",
+  },
+  periodSelector: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+  },
+  periodButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: "center",
+    marginHorizontal: 4,
+  },
+  periodButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  periodConfig: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+  periodConfigButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  periodConfigText: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  quarterButton: {
+    width: 36,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  periodInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 14,
   },
   insightCard: { padding: 16, borderRadius: 16, marginBottom: 16 },
   sectionBlock: { padding: 16, borderRadius: 16, marginBottom: 16 },

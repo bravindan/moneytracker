@@ -6,10 +6,8 @@ import {
   ScrollView,
   StyleSheet,
   StatusBar,
-  FlatList,
   Modal,
   TextInput,
-  DatePickerAndroid,
   Platform,
   Alert,
   KeyboardAvoidingView,
@@ -22,7 +20,6 @@ import {
   getExpenses,
   getMonthlySummary,
   addSpending,
-  getSpendingByCategory,
   getSpending,
   getUserProfile,
 } from "../services/firestoreService";
@@ -1237,26 +1234,6 @@ const styles = StyleSheet.create({
   // Date picker styles
   datePickerContainer: {
     gap: 12,
-  },
-  datePickerLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  dateOptions: {
-    gap: 8,
-  },
-  dateOptionButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  dateOptionText: {
-    fontSize: 14,
-    fontWeight: "500",
   },
 });
 
