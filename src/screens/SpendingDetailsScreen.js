@@ -544,7 +544,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
                 <Text
                   style={{ marginBottom: 8, color: theme.colors.textSecondary }}
                 >
-                  Item Name:
+                  {isUnallocated ? "Item *" : "Item Name:"}
                 </Text>
                 <TextInput
                   style={[
@@ -555,58 +555,105 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
                       color: theme.colors.text,
                     },
                   ]}
-                  placeholder="e.g., Coffee, Groceries, etc."
+                  placeholder={isUnallocated ? "e.g. Groceries" : "e.g., Coffee, Groceries, etc."}
                   placeholderTextColor={theme.colors.textSecondary}
                   value={item}
                   onChangeText={setItem}
                 />
               </View>
 
-              <View style={{ marginBottom: 16 }}>
-                <Text
-                  style={{ marginBottom: 8, color: theme.colors.textSecondary }}
-                >
-                  Amount:
-                </Text>
-                <TextInput
-                  style={[
-                    { borderWidth: 1, borderRadius: 8, padding: 12 },
-                    {
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border,
-                      color: theme.colors.text,
-                    },
-                  ]}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={amount}
-                  onChangeText={setAmount}
-                />
-              </View>
+              {isUnallocated ? (
+                <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
+                  <View style={{ flex: 0.7 }}>
+                    <Text style={{ marginBottom: 8, color: theme.colors.textSecondary }}>
+                      Amount *
+                    </Text>
+                    <TextInput
+                      style={[
+                        { borderWidth: 1, borderRadius: 8, padding: 12 },
+                        {
+                          backgroundColor: theme.colors.background,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.text,
+                        },
+                      ]}
+                      placeholder="0.00"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      keyboardType="numeric"
+                      value={amount}
+                      onChangeText={setAmount}
+                    />
+                  </View>
+                  <View style={{ flex: 0.3 }}>
+                    <Text style={{ marginBottom: 8, color: theme.colors.textSecondary }}>
+                      Txn Cost
+                    </Text>
+                    <TextInput
+                      style={[
+                        { borderWidth: 1, borderRadius: 8, padding: 12 },
+                        {
+                          backgroundColor: theme.colors.background,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.text,
+                        },
+                      ]}
+                      placeholder="0.00"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      keyboardType="numeric"
+                      value={transactionCosts}
+                      onChangeText={setTransactionCosts}
+                    />
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{ marginBottom: 8, color: theme.colors.textSecondary }}
+                    >
+                      Amount:
+                    </Text>
+                    <TextInput
+                      style={[
+                        { borderWidth: 1, borderRadius: 8, padding: 12 },
+                        {
+                          backgroundColor: theme.colors.background,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.text,
+                        },
+                      ]}
+                      placeholder="0.00"
+                      keyboardType="numeric"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      value={amount}
+                      onChangeText={setAmount}
+                    />
+                  </View>
 
-              <View style={{ marginBottom: 16 }}>
-                <Text
-                  style={{ marginBottom: 8, color: theme.colors.textSecondary }}
-                >
-                  Transaction Cost (Optional):
-                </Text>
-                <TextInput
-                  style={[
-                    { borderWidth: 1, borderRadius: 8, padding: 12 },
-                    {
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border,
-                      color: theme.colors.text,
-                    },
-                  ]}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={transactionCosts}
-                  onChangeText={setTransactionCosts}
-                />
-              </View>
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{ marginBottom: 8, color: theme.colors.textSecondary }}
+                    >
+                      Transaction Cost (Optional):
+                    </Text>
+                    <TextInput
+                      style={[
+                        { borderWidth: 1, borderRadius: 8, padding: 12 },
+                        {
+                          backgroundColor: theme.colors.background,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.text,
+                        },
+                      ]}
+                      placeholder="0.00"
+                      keyboardType="numeric"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      value={transactionCosts}
+                      onChangeText={setTransactionCosts}
+                    />
+                  </View>
+                </>
+              )}
 
               <View style={{ marginBottom: 16 }}>
                 <Text
