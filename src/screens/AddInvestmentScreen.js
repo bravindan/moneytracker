@@ -459,7 +459,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                       styles.allocatedAmountValue,
                       {
                         color:
-                          pendingBalance > 0
+                          allocatedAmount - totalOutlay > 0
                             ? theme.colors.tabBarActive
                             : "#ef4444",
                       },
@@ -467,7 +467,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                     numberOfLines={1}
                     adjustsFontSizeToFit
                   >
-                    {fmt(Math.max(pendingBalance - totalOutlay, 0))}
+                    {fmt(Math.max(allocatedAmount - totalOutlay, 0))}
                   </Text>
                 </View>
               </View>
