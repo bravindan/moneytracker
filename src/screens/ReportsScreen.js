@@ -6,13 +6,13 @@ import {
   StyleSheet,
   StatusBar,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   Modal,
   TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import IOSSpinner from "../components/IOSSpinner";
 import { useTheme } from "../contexts/ThemeContext";
 import { getCurrentUser } from "../services/authService";
 import {
@@ -35,7 +35,7 @@ const ReportsScreen = ({ navigation, route }) => {
   const [printing, setPrinting] = useState(false);
   const [reportMode, setReportMode] = useState("monthly"); // 'monthly' | 'quarterly' | 'annual' | 'custom'
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
-  const [showRecommendations, setShowRecommendations] = useState(true);
+  const [showRecommendations, setShowRecommendations] = useState(false);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedQuarter, setSelectedQuarter] = useState(Math.floor(new Date().getMonth() / 3) + 1);
   const [customStartMonth, setCustomStartMonth] = useState("");
@@ -348,7 +348,7 @@ const ReportsScreen = ({ navigation, route }) => {
           { backgroundColor: theme.colors.background },
         ]}
       >
-        <ActivityIndicator size="large" color={theme.colors.tabBarActive} />
+        <IOSSpinner size={40} color={theme.colors.tabBarActive} />
       </View>
     );
   }
@@ -579,7 +579,7 @@ const ReportsScreen = ({ navigation, route }) => {
           style={{ padding: 8 }}
         >
           {printing ? (
-            <ActivityIndicator size="small" color={theme.colors.tabBarActive} />
+            <IOSSpinner size={20} color={theme.colors.tabBarActive} />
           ) : (
             <Ionicons
               name="print-outline"

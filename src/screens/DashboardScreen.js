@@ -4,7 +4,6 @@ import {
   View,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   RefreshControl,
   Modal,
   Alert,
@@ -15,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
+import IOSSpinner from "../components/IOSSpinner";
 import { getCurrentUser, logoutUser } from "../services/authService";
 import {
   getMonthlySummary,
@@ -666,7 +666,7 @@ export default function DashboardScreen({ navigation }) {
           { backgroundColor: theme.colors.background, paddingTop: insets.top },
         ]}
       >
-        <ActivityIndicator size="large" color={theme.colors.tabBarActive} />
+        <IOSSpinner size={40} color={theme.colors.tabBarActive} />
       </View>
     );
   }
