@@ -24,6 +24,7 @@ import {
   addSpending,
   getSpendingByCategory,
   getSpending,
+  getUserProfile,
 } from "../services/firestoreService";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Print from "expo-print";
@@ -35,6 +36,23 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const user = getCurrentUser();
+  const [profile, setProfile] = useState(null);
+
+  // Fetch profile for currency
+  useEffect(() => {
+    if (!user?.uid) return;
+    getUserProfile(user.uid).then(setProfile).catch(() => {});
+  }, [user?.uid]);
+
+  const currencyCode = profile?.currency || "KES";
+  const fmt = (amount) => {
+    const num = typeof amount === "number" ? amount : parseFloat(amount) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+    }).format(num);
+  };
 
   // State for dynamic data
   const [expenses, setExpenses] = useState([]);
@@ -180,12 +198,12 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
         );
 
         tableHTML += `
-          <h3 style="margin-top: 20px; color: #1e3a8a;">${expense.category} (Allocated: KES ${expense.amount.toFixed(2)} | Spent: KES ${catSpent.toFixed(2)})</h3>
+          <h3 style="margin-top: 20px; color: #1e3a8a;">${expense.category} (Allocated: ${fmt(expense.amount)} | Spent: ${fmt(catSpent)})</h3>
           <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
             <tr>
               <th style="border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f3f4f6;">Date</th>
               <th style="border: 1px solid #ddd; padding: 8px; text-align: left; background-color: #f3f4f6;">Item</th>
-              <th style="border: 1px solid #ddd; padding: 8px; text-align: right; background-color: #f3f4f6;">Amount (KES)</th>
+              <th style="border: 1px solid #ddd; padding: 8px; text-align: right; background-color: #f3f4f6;">Amount (${currencyCode})</th>
             </tr>
         `;
 
@@ -222,10 +240,10 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
             <h1>Expense Expenditures Report</h1>
             <div class="summary-box">
               <p><strong>Generated on:</strong> ${todayDate}</p>
-              <p><strong>Total Allocated:</strong> KES ${totalAllocated.toFixed(2)}</p>
-              <p><strong>Total Spent:</strong> KES ${totalSpent.toFixed(2)}</p>
-              <p><strong>Total Transaction Costs:</strong> KES ${totalTxnCosts.toFixed(2)}</p>
-              <p><strong>Remaining:</strong> KES ${totalRemaining.toFixed(2)}</p>
+              <p><strong>Total Allocated:</strong> ${fmt(totalAllocated)}</p>
+              <p><strong>Total Spent:</strong> ${fmt(totalSpent)}</p>
+              <p><strong>Total Transaction Costs:</strong> ${fmt(totalTxnCosts)}</p>
+              <p><strong>Remaining:</strong> ${fmt(totalRemaining)}</p>
             </div>
             <h2>Breakdown by Category</h2>
             ${tableHTML}
@@ -420,7 +438,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                   numberOfLines={1}
                   adjustsFontSizeToFit
                 >
-                  KES {totalAllocated.toLocaleString()}
+                  {fmt(totalAllocated)}
                 </Text>
               </View>
               <View
@@ -441,7 +459,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                   numberOfLines={1}
                   adjustsFontSizeToFit
                 >
-                  KES {totalSpent.toLocaleString()}
+                  {fmt(totalSpent)}
                 </Text>
               </View>
               <View
@@ -468,7 +486,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                   numberOfLines={1}
                   adjustsFontSizeToFit
                 >
-                  KES {totalRemaining.toLocaleString()}
+                  {fmt(totalRemaining)}
                 </Text>
               </View>
             </View>
@@ -531,11 +549,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                     <Text
                       style={[styles.detailValue, { color: theme.colors.text }]}
                     >
-                      KES{" "}
-                      {expense.amount.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {fmt(expense.amount)}
                     </Text>
                   </View>
                   <View style={styles.detailRow}>
@@ -550,11 +564,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                     <Text
                       style={[styles.detailValue, { color: theme.colors.text }]}
                     >
-                      KES{" "}
-                      {calculateCategorySpent(expense.category).toLocaleString(
-                        undefined,
-                        { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-                      )}
+                      {fmt(calculateCategorySpent(expense.category))}
                     </Text>
                   </View>
                   <View style={styles.detailRow}>
@@ -576,14 +586,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                           : styles.negative,
                       ]}
                     >
-                      KES{" "}
-                      {(
-                        expense.amount -
-                        calculateCategorySpent(expense.category)
-                      ).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {fmt(expense.amount - calculateCategorySpent(expense.category))}
                     </Text>
                   </View>
                   <View style={styles.spendingButtonContainer}>
@@ -706,56 +709,57 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text
-                  style={[
-                    styles.inputLabel,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Amount:
-                </Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border,
-                      color: theme.colors.text,
-                    },
-                  ]}
-                  placeholder="0.00"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  keyboardType="numeric"
-                  value={spendingAmount}
-                  onChangeText={setSpendingAmount}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text
-                  style={[
-                    styles.inputLabel,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Transaction Cost (Optional):
-                </Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.border,
-                      color: theme.colors.text,
-                    },
-                  ]}
-                  placeholder="0.00"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={transactionCosts}
-                  onChangeText={setTransactionCosts}
-                  keyboardType="numeric"
-                />
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <View style={{ flex: 0.7 }}>
+                  <Text
+                    style={[
+                      styles.inputLabel,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Amount:
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.border,
+                        color: theme.colors.text,
+                      },
+                    ]}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    keyboardType="numeric"
+                    value={spendingAmount}
+                    onChangeText={setSpendingAmount}
+                  />
+                </View>
+                <View style={{ flex: 0.3 }}>
+                  <Text
+                    style={[
+                      styles.inputLabel,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Txn Cost:
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.border,
+                        color: theme.colors.text,
+                      },
+                    ]}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={transactionCosts}
+                    onChangeText={setTransactionCosts}
+                    keyboardType="numeric"
+                  />
+                </View>
               </View>
 
               <View style={styles.inputGroup}>
@@ -996,8 +1000,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
   },
   backButton: {
     width: 40,

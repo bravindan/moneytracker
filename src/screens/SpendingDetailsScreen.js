@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   getSpending,
   updateMonthlySummary,
   getMonthlySummary,
+  getUserProfile,
 } from "../services/firestoreService";
 import {
   Alert,
@@ -28,14 +29,31 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 
 const SpendingDetailsScreen = ({ route, navigation }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const user = getCurrentUser();
+  const [profile, setProfile] = useState(null);
 
   const { category, selectedMonth } = route.params || {};
   const isUnallocated = category === "Unallocated";
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    getUserProfile(user.uid).then(setProfile).catch(() => {});
+  }, [user?.uid]);
+
+  const currencyCode = profile?.currency || "KES";
+  const fmt = (amount) => {
+    const num = typeof amount === "number" ? amount : parseFloat(amount) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+    }).format(num);
+  };
 
   // State for spending data
   const [spendingList, setSpendingList] = useState([]);
@@ -222,34 +240,41 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   };
 
   // Load spending data for the specific category or unallocated spend
-  useEffect(() => {
-    const loadSpendingData = async () => {
-      try {
-        setLoading(true);
-        let spendingData = [];
-        if (isUnallocated) {
-          const allSpending = await getSpending(user.uid, selectedMonth);
-          spendingData = allSpending.filter((s) => s.isUnallocated);
-        } else if (category) {
-          spendingData = await getSpendingByCategory(
-            user.uid,
-            category,
-            selectedMonth,
-          );
+  useFocusEffect(
+    useCallback(() => {
+      const loadSpendingData = async () => {
+        try {
+          setLoading(true);
+          let spendingData = [];
+          if (isUnallocated) {
+            const allSpending = await getSpending(user.uid, selectedMonth);
+            spendingData = allSpending.filter((s) => s.category === "Unallocated");
+          } else if (category) {
+            spendingData = await getSpendingByCategory(
+              user.uid,
+              category,
+              selectedMonth,
+            );
+          }
+          const sorted = spendingData.sort((a, b) => {
+            const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date || 0);
+            const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date || 0);
+            return dateB - dateA;
+          });
+          setSpendingList(sorted);
+        } catch (error) {
+          console.error("Failed to load spending data:", error);
+          setSpendingList([]);
+        } finally {
+          setLoading(false);
         }
-        setSpendingList(spendingData);
-      } catch (error) {
-        console.error("Failed to load spending data:", error);
-        setSpendingList([]);
-      } finally {
-        setLoading(false);
-      }
-    };
+      };
 
-    if (isUnallocated || category) {
-      loadSpendingData();
-    }
-  }, [user.uid, category, selectedMonth, isUnallocated]);
+      if (isUnallocated || category) {
+        loadSpendingData();
+      }
+    }, [user.uid, category, selectedMonth, isUnallocated])
+  );
 
   const renderSpendingItem = ({ item: spending }) => (
     <View
@@ -300,11 +325,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
             Amount:
           </Text>
           <Text style={[styles.detailValue, { color: theme.colors.text }]}>
-            KES{" "}
-            {spending.amount.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            {fmt(spending.amount)}
           </Text>
         </View>
 
@@ -315,11 +336,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
             Transaction Cost:
           </Text>
           <Text style={[styles.detailValue, { color: theme.colors.text }]}>
-            KES{" "}
-            {spending.transactionCosts.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            {fmt(spending.transactionCosts || 0)}
           </Text>
         </View>
 
@@ -351,11 +368,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
               { color: theme.colors.tabBarActive, fontWeight: "bold" },
             ]}
           >
-            KES{" "}
-            {spending.totalSpending.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            {fmt(spending.totalSpending)}
           </Text>
         </View>
       </View>
@@ -410,20 +423,31 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
         </View>
       ) : spendingList.length === 0 ? (
         <View style={styles.emptyContainer}>
+          <Ionicons
+            name="wallet-outline"
+            size={48}
+            color={theme.colors.textSecondary}
+            style={{ marginBottom: 12 }}
+          />
           <Text
-            style={[styles.emptyText, { color: theme.colors.textSecondary }]}
+            style={[styles.emptyText, { color: theme.colors.textSecondary, marginBottom: 20 }]}
           >
             No spending records found for {category}.
           </Text>
           <TouchableOpacity
-            style={[
-              styles.addSpendingButton,
-              { backgroundColor: theme.colors.tabBarActive },
-            ]}
+            style={{
+              backgroundColor: theme.colors.tabBarActive,
+              paddingHorizontal: 24,
+              paddingVertical: 14,
+              borderRadius: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+            }}
             onPress={handleOpenAddModal}
           >
-            <Ionicons name="add-circle-outline" size={16} color="#fff" />
-            <Text style={styles.addSpendingButtonText}>Add Spending</Text>
+            <Ionicons name="add-circle-outline" size={20} color="#fff" />
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>Add Spending</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -831,8 +855,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
   },
   backButton: {
     width: 40,

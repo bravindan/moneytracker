@@ -21,6 +21,7 @@ import {
   getMonthlySummary,
   updateExpense,
   deleteExpense,
+  getUserProfile,
 } from "../services/firestoreService";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -29,6 +30,23 @@ const AddExpenseScreen = ({ navigation, route }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const user = getCurrentUser();
+  const [profile, setProfile] = useState(null);
+
+  // Fetch profile for currency
+  useEffect(() => {
+    if (!user?.uid) return;
+    getUserProfile(user.uid).then(setProfile).catch(() => {});
+  }, [user?.uid]);
+
+  const currencyCode = profile?.currency || "KES";
+  const fmt = (amount) => {
+    const num = typeof amount === "number" ? amount : parseFloat(amount) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+    }).format(num);
+  };
 
   // Predefined categories
   const [predefinedCategories, setPredefinedCategories] = useState([
@@ -69,7 +87,12 @@ const AddExpenseScreen = ({ navigation, route }) => {
 
         // Get expenses from dedicated expenses collection
         const expensesData = await getExpenses(user.uid, selectedMonth);
-        setExpenses(expensesData);
+        const sorted = expensesData.sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+          return dateB - dateA;
+        });
+        setExpenses(sorted);
 
         // Get monthly summary for allocation data
         const monthlyData = await getMonthlySummary(user.uid, selectedMonth);
@@ -288,7 +311,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
             {expense.category}
           </Text>
           <Text style={[styles.expenseAmount, { color: theme.colors.text }]}>
-            KES {expense.amount.toLocaleString()}
+            {fmt(expense.amount)}
           </Text>
           {parseFloat(allocationPercentage) > 0 && (
             <Text
@@ -405,11 +428,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
                     { color: theme.colors.text },
                   ]}
                 >
-                  KES{" "}
-                  {allocatedAmount.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {fmt(allocatedAmount)}
                 </Text>
               </View>
 
@@ -558,10 +577,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
                   <Text
                     style={[styles.totalAmount, { color: theme.colors.text }]}
                   >
-                    Total: KES{" "}
-                    {expenses
-                      .reduce((sum, expense) => sum + expense.amount, 0)
-                      .toLocaleString()}
+                    Total: {fmt(expenses.reduce((sum, expense) => sum + expense.amount, 0))}
                   </Text>
                 </View>
 
@@ -598,7 +614,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1,
   },
   backButton: {
     width: 40,

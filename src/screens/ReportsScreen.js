@@ -16,6 +16,7 @@ import {
   getMonthlySummary,
   getSpending,
   getInvestments,
+  getUserProfile,
 } from "../services/firestoreService";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -24,7 +25,15 @@ const ReportsScreen = ({ navigation, route }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const user = getCurrentUser();
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    getUserProfile(user.uid).then(setProfile).catch(() => {});
+  }, [user?.uid]);
+
+  const currencyCode = profile?.currency || "KES";
   const [selectedMonth, setSelectedMonth] = useState(
     route?.params?.selectedMonth || getCurrentMonth(),
   );
@@ -36,10 +45,14 @@ const ReportsScreen = ({ navigation, route }) => {
     return date.toLocaleString("default", { month: "long", year: "numeric" });
   };
 
-  const fmt = (val) =>
-    val
-      ? `KES ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      : "KES 0.00";
+  const fmt = (val) => {
+    const num = typeof val === "number" ? val : parseFloat(val) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+    }).format(num);
+  };
 
   const fetchData = useCallback(async () => {
     if (!user?.uid) return;

@@ -17,6 +17,7 @@ import { getCurrentUser } from "../services/authService";
 import {
   getInvestments,
   getMonthlySummary,
+  getUserProfile,
 } from "../services/firestoreService";
 import { Table, Row, Rows } from "react-native-table-component";
 import * as Print from "expo-print";
@@ -36,6 +37,23 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
 
   const user = getCurrentUser();
   const uid = user?.uid;
+  const [profile, setProfile] = useState(null);
+
+  // Fetch profile for currency
+  useEffect(() => {
+    if (!uid) return;
+    getUserProfile(uid).then(setProfile).catch(() => {});
+  }, [uid]);
+
+  const currencyCode = profile?.currency || "KES";
+  const fmt = (amount) => {
+    const num = typeof amount === "number" ? amount : parseFloat(amount) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+    }).format(num);
+  };
 
   useEffect(() => {
     if (uid) {
@@ -135,19 +153,19 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
             <h3>Investment Summary</h3>
             <div class="summary-row">
               <span class="summary-label">Total Invested:</span>
-              <span class="summary-value">KES ${totalInvested.toLocaleString()}</span>
+              <span class="summary-value">${fmt(totalInvested)}</span>
             </div>
             <div class="summary-row">
               <span class="summary-label">Transaction Costs:</span>
-              <span class="summary-value">KES ${totalTransactionCosts.toLocaleString()}</span>
+              <span class="summary-value">${fmt(totalTransactionCosts)}</span>
             </div>
             <div class="summary-row">
               <span class="summary-label">Total Outlay:</span>
-              <span class="summary-value">KES ${totalOutlay.toLocaleString()}</span>
+              <span class="summary-value">${fmt(totalOutlay)}</span>
             </div>
             <div class="summary-row">
               <span class="summary-label">Allocated Amount:</span>
-              <span class="summary-value">KES ${allocatedAmount.toLocaleString()}</span>
+              <span class="summary-value">${fmt(allocatedAmount)}</span>
             </div>
             <div class="summary-row">
               <span class="summary-label">Number of Investments:</span>
@@ -155,7 +173,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
             </div>
             <div class="summary-row">
               <span class="summary-label">Remaining:</span>
-              <span class="summary-value">KES ${Math.max(0, allocatedAmount - totalOutlay).toLocaleString()}</span>
+              <span class="summary-value">${fmt(Math.max(0, allocatedAmount - totalOutlay))}</span>
             </div>
             <div class="summary-row">
               <span class="summary-label">Investment Rate:</span>
@@ -169,8 +187,8 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
               <tr>
                 <th>Category</th>
                 <th>Platform</th>
-                <th>Amount (KES)</th>
-                <th>Cost (KES)</th>
+                <th>Amount (${currencyCode})</th>
+                <th>Cost (${currencyCode})</th>
                 <th>Date</th>
                 <th>% of Allocated</th>
               </tr>
@@ -186,8 +204,8 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
                   <tr>
                     <td>${investment.category || "N/A"}</td>
                     <td>${investment.platform || "N/A"}</td>
-                    <td>KES ${investment.amount.toLocaleString()}</td>
-                    <td>KES ${(investment.transactionCosts || 0).toLocaleString()}</td>
+                    <td>${fmt(investment.amount)}</td>
+                    <td>${fmt(investment.transactionCosts || 0)}</td>
                     <td>${formatDate(investment.createdAt)}</td>
                     <td>${percentage}%</td>
                   </tr>
@@ -230,8 +248,8 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
   const tableHead = [
     "Category",
     "Platform",
-    "Amount (KES)",
-    "Cost (KES)",
+    `Amount (${currencyCode})`,
+    `Cost (${currencyCode})`,
     "Date",
   ];
 
@@ -329,7 +347,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
               Total Invested:
             </Text>
             <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-              KES {totalInvested.toLocaleString()}
+              {fmt(totalInvested)}
             </Text>
           </View>
           <View style={styles.summaryRow}>
@@ -342,7 +360,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
               Transaction Costs:
             </Text>
             <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-              KES {totalTransactionCosts.toLocaleString()}
+              {fmt(totalTransactionCosts)}
             </Text>
           </View>
           <View style={styles.summaryRow}>
@@ -355,7 +373,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
               Total Outlay:
             </Text>
             <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-              KES {totalOutlay.toLocaleString()}
+              {fmt(totalOutlay)}
             </Text>
           </View>
           <View style={styles.summaryRow}>
@@ -368,7 +386,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
               Allocated Amount:
             </Text>
             <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-              KES {allocatedAmount.toLocaleString()}
+              {fmt(allocatedAmount)}
             </Text>
           </View>
           <View style={styles.summaryRow}>
@@ -394,8 +412,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
               Remaining:
             </Text>
             <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-              KES{" "}
-              {Math.max(0, allocatedAmount - totalInvested).toLocaleString()}
+              {fmt(Math.max(0, allocatedAmount - totalInvested))}
             </Text>
           </View>
           <View style={styles.summaryRow}>
@@ -486,8 +503,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
   },
   backButton: {
     width: 40,

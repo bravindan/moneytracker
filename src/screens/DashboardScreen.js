@@ -8,6 +8,9 @@ import {
   RefreshControl,
   Modal,
   Alert,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -20,6 +23,7 @@ import {
   getSpending,
   getInvestments,
   deleteMonthlySummary,
+  addSpending,
 } from "../services/firestoreService";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
@@ -59,7 +63,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 8,
-    borderBottomWidth: 1,
   },
   stickyHeader: {
     position: "sticky",
@@ -433,6 +436,14 @@ export default function DashboardScreen({ navigation }) {
   const [investments, setInvestments] = useState([]);
   const [showRecordMenu, setShowRecordMenu] = useState(false);
 
+  // Unallocated spending modal state
+  const [showUnallocatedModal, setShowUnallocatedModal] = useState(false);
+  const [unallocatedItem, setUnallocatedItem] = useState("");
+  const [unallocatedAmount, setUnallocatedAmount] = useState("");
+  const [unallocatedTxnCost, setUnallocatedTxnCost] = useState("");
+  const [unallocatedDesc, setUnallocatedDesc] = useState("");
+  const [unallocatedDate, setUnallocatedDate] = useState(new Date());
+
   const fetchProfile = useCallback(async () => {
     if (!uid) return;
     try {
@@ -498,23 +509,31 @@ export default function DashboardScreen({ navigation }) {
   const financialData = monthlyData
     ? {
         income: monthlyData.income || 0,
-        balance: monthlyData.balance || 0,
+        balance:
+          (monthlyData.balance || 0) -
+          allSpending
+            .filter((s) => s.category === "Unallocated")
+            .reduce((sum, s) => sum + (s.totalSpending || s.amount || 0), 0),
         savingsInvestments:
           (monthlyData.investmentAmount || 0),
         expenses: {
           allocated: monthlyData.expensesAmount || 0,
-          spent: allSpending.reduce(
-            (sum, spending) =>
-              sum + (spending.totalSpending || spending.amount || 0),
-            0,
-          ),
-          remaining:
-            (monthlyData.expensesAmount || 0) -
-            allSpending.reduce(
+          spent: allSpending
+            .filter((s) => s.category !== "Unallocated")
+            .reduce(
               (sum, spending) =>
                 sum + (spending.totalSpending || spending.amount || 0),
               0,
             ),
+          remaining:
+            (monthlyData.expensesAmount || 0) -
+            allSpending
+              .filter((s) => s.category !== "Unallocated")
+              .reduce(
+                (sum, spending) =>
+                  sum + (spending.totalSpending || spending.amount || 0),
+                0,
+              ),
         },
         expenseBreakdown: [], // we don't have breakdown in monthly summary yet
         investments: [], // we don't have investments in monthly summary yet
@@ -606,6 +625,45 @@ export default function DashboardScreen({ navigation }) {
     );
   };
 
+  const handleSaveUnallocatedSpending = async () => {
+    if (!unallocatedItem.trim()) {
+      Alert.alert("Required", "Please enter an item name.");
+      return;
+    }
+    const amountNum = parseFloat(unallocatedAmount);
+    if (!amountNum || amountNum <= 0) {
+      Alert.alert("Required", "Please enter a valid amount.");
+      return;
+    }
+    const txnCostNum = parseFloat(unallocatedTxnCost) || 0;
+    if (amountNum > financialData.balance) {
+      Alert.alert("Insufficient", "Amount exceeds available balance.");
+      return;
+    }
+    try {
+      await addSpending(uid, {
+        itemName: unallocatedItem.trim(),
+        category: "Unallocated",
+        amount: amountNum,
+        transactionCosts: txnCostNum,
+        totalSpending: amountNum + txnCostNum,
+        description: unallocatedDesc.trim(),
+        date: unallocatedDate,
+      });
+      setShowUnallocatedModal(false);
+      setUnallocatedItem("");
+      setUnallocatedAmount("");
+      setUnallocatedTxnCost("");
+      setUnallocatedDesc("");
+      setUnallocatedDate(new Date());
+      await fetchMonthlyData();
+      Alert.alert("Success", "Spending recorded.");
+    } catch (error) {
+      console.error("Failed to save spending:", error);
+      Alert.alert("Error", "Failed to save spending.");
+    }
+  };
+
   if (loading || profileLoading) {
     return (
       <View
@@ -643,7 +701,6 @@ export default function DashboardScreen({ navigation }) {
               styles.headerContainer,
               {
                 backgroundColor: theme.colors.card,
-                borderBottomColor: theme.colors.border,
               },
             ]}
           >
@@ -792,7 +849,6 @@ export default function DashboardScreen({ navigation }) {
           styles.headerContainer,
           {
             backgroundColor: theme.colors.card,
-            borderBottomColor: theme.colors.border,
           },
         ]}
       >
@@ -1436,12 +1492,7 @@ export default function DashboardScreen({ navigation }) {
                     styles.actionButton,
                     { borderColor: theme.colors.border },
                   ]}
-                  onPress={() =>
-                    navigation.navigate("SpendingDetails", {
-                      selectedMonth,
-                      category: "Unallocated",
-                    })
-                  }
+                  onPress={() => setShowUnallocatedModal(true)}
                 >
                   <Ionicons
                     name="add-outline"
@@ -1544,15 +1595,6 @@ export default function DashboardScreen({ navigation }) {
               % of your income. Expenses are at{" "}
               {Math.round(exactExpensePercentage)}% with{" "}
               {fmt(financialData.expenses.remaining)} remaining.
-            </Text>
-          </View>
-
-          {/* ── Footer ── */}
-          <View style={styles.footerContainer}>
-            <Text
-              style={[styles.footerText, { color: theme.colors.textSecondary }]}
-            >
-              Updated: {selectedMonth}
             </Text>
           </View>
         </View>
@@ -1731,6 +1773,122 @@ export default function DashboardScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Unallocated Spending Modal */}
+      <Modal
+        visible={showUnallocatedModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowUnallocatedModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 20 }}>
+            <View style={{ backgroundColor: theme.colors.card, borderRadius: 16, padding: 24, width: "100%", maxWidth: 360 }}>
+              <Text style={{ fontSize: 18, fontWeight: "bold", color: theme.colors.text, marginBottom: 16, textAlign: "center" }}>
+                Record Spending
+              </Text>
+              <Text style={{ fontSize: 14, color: theme.colors.textSecondary, marginBottom: 16, textAlign: "center" }}>
+                Available: {fmt(financialData.balance)}
+              </Text>
+              <View style={{ marginBottom: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Item *</Text>
+                <TextInput
+                  style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, color: theme.colors.text, backgroundColor: theme.colors.background }}
+                  placeholder="e.g. Groceries"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={unallocatedItem}
+                  onChangeText={setUnallocatedItem}
+                />
+              </View>
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
+                <View style={{ flex: 0.7 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Amount *</Text>
+                  <TextInput
+                    style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, color: theme.colors.text, backgroundColor: theme.colors.background }}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    keyboardType="numeric"
+                    value={unallocatedAmount}
+                    onChangeText={setUnallocatedAmount}
+                  />
+                </View>
+                <View style={{ flex: 0.3 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Txn Cost</Text>
+                  <TextInput
+                    style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, color: theme.colors.text, backgroundColor: theme.colors.background }}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    keyboardType="numeric"
+                    value={unallocatedTxnCost}
+                    onChangeText={setUnallocatedTxnCost}
+                  />
+                </View>
+              </View>
+              <View style={{ marginBottom: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Date</Text>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, backgroundColor: theme.colors.background, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+                    onPress={() => {
+                      const newDate = new Date(unallocatedDate);
+                      newDate.setDate(newDate.getDate() - 1);
+                      setUnallocatedDate(newDate);
+                    }}
+                  >
+                    <Ionicons name="chevron-back" size={16} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flex: 3, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, backgroundColor: theme.colors.background, flexDirection: "row", alignItems: "center", justifyContent: "center" }}
+                    onPress={() => setUnallocatedDate(new Date())}
+                  >
+                    <Ionicons name="calendar-outline" size={16} color={theme.colors.textSecondary} style={{ marginRight: 8 }} />
+                    <Text style={{ color: theme.colors.text, fontSize: 14 }}>
+                      {unallocatedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, backgroundColor: theme.colors.background, flexDirection: "row", alignItems: "center", justifyContent: "center" }}
+                    onPress={() => {
+                      const newDate = new Date(unallocatedDate);
+                      newDate.setDate(newDate.getDate() + 1);
+                      setUnallocatedDate(newDate);
+                    }}
+                  >
+                    <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Description</Text>
+                <TextInput
+                  style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, color: theme.colors.text, backgroundColor: theme.colors.background }}
+                  placeholder="Optional"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={unallocatedDesc}
+                  onChangeText={setUnallocatedDesc}
+                />
+              </View>
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: theme.colors.border, alignItems: "center" }}
+                  onPress={() => setShowUnallocatedModal(false)}
+                >
+                  <Text style={{ color: theme.colors.text, fontWeight: "600" }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: theme.colors.tabBarActive, alignItems: "center" }}
+                  onPress={handleSaveUnallocatedSpending}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "600" }}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

@@ -23,6 +23,7 @@ import {
   deleteInvestment,
   getMonthlySummary,
   getSpending,
+  getUserProfile,
 } from "../services/firestoreService";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -55,6 +56,24 @@ const AddInvestmentScreen = ({ navigation, route }) => {
 
   const user = getCurrentUser();
   const uid = user?.uid;
+  const [profile, setProfile] = useState(null);
+
+  // Fetch profile for currency
+  useEffect(() => {
+    if (!uid) return;
+    getUserProfile(uid).then(setProfile).catch(() => {});
+  }, [uid]);
+
+  const currencyCode = profile?.currency || "KES";
+  const fmt = (amount) => {
+    const num = typeof amount === "number" ? amount : parseFloat(amount) || 0;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(num);
+  };
 
   const [pendingBalance, setPendingBalance] = useState(0);
   const [totalSpent, setTotalSpent] = useState(0);
@@ -73,11 +92,9 @@ const AddInvestmentScreen = ({ navigation, route }) => {
 
       const income = monthlyData?.income || 0;
       const expensesAmount = monthlyData?.expensesAmount || 0;
-      const savingsInvestments =
-        (monthlyData?.savingsAmount || 0) +
-        (monthlyData?.investmentAmount || 0);
+      const investmentAllocated = monthlyData?.investmentAmount || 0;
 
-      setAllocatedAmount(savingsInvestments);
+      setAllocatedAmount(investmentAllocated);
 
       const spending = await getSpending(uid, selectedMonth);
       const totalCategorySpends = spending.reduce(
@@ -85,9 +102,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
         0,
       );
 
-      const reservedOutlay =
-        (parseFloat(monthlyData?.investmentAmount) || 0) +
-        (parseFloat(monthlyData?.savingsAmount) || 0);
+      const reservedOutlay = parseFloat(monthlyData?.investmentAmount) || 0;
 
       const balance = income - expensesAmount - reservedOutlay - totalCategorySpends;
 
@@ -104,7 +119,12 @@ const AddInvestmentScreen = ({ navigation, route }) => {
   const loadInvestments = async () => {
     try {
       const data = await getInvestments(uid, selectedMonth);
-      setInvestments(data || []);
+      const sorted = (data || []).sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+      setInvestments(sorted);
     } catch (error) {
       console.error("Failed to load investments:", error);
     }
@@ -254,7 +274,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
             • {item.platform}
           </Text>
           <Text style={[styles.investmentAmount, { color: theme.colors.text }]}>
-            KES {item.amount.toLocaleString()}
+            {fmt(item.amount)}
           </Text>
         </View>
         <View style={styles.investmentDetails}>
@@ -276,8 +296,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
               { color: theme.colors.textSecondary },
             ]}
           >
-            Transaction Cost: KES{" "}
-            {(item.transactionCosts || 0).toLocaleString()}
+            Transaction Cost: {fmt(item.transactionCosts || 0)}
           </Text>
           {item.description && (
             <Text
@@ -414,20 +433,16 @@ const AddInvestmentScreen = ({ navigation, route }) => {
               <View style={styles.summaryRow}>
                 <View style={{ flex: 1, alignItems: "center" }}>
                   <Text
-                    style={[
-                      styles.allocatedAmountLabel,
-                      { color: theme.colors.textSecondary },
-                    ]}
+                    style={[styles.allocatedAmountLabel, { color: theme.colors.textSecondary }]}
                   >
                     Allocated
                   </Text>
                   <Text
-                    style={[
-                      styles.allocatedAmountValue,
-                      { color: theme.colors.tabBarActive },
-                    ]}
+                    style={[styles.allocatedAmountValue, { color: theme.colors.tabBarActive }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                   >
-                    KES {allocatedAmount.toLocaleString()}
+                    {fmt(allocatedAmount)}
                   </Text>
                 </View>
                 <View
@@ -439,20 +454,16 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                 />
                 <View style={{ flex: 1, alignItems: "center" }}>
                   <Text
-                    style={[
-                      styles.allocatedAmountLabel,
-                      { color: theme.colors.textSecondary },
-                    ]}
+                    style={[styles.allocatedAmountLabel, { color: theme.colors.textSecondary }]}
                   >
                     Outlay
                   </Text>
                   <Text
-                    style={[
-                      styles.allocatedAmountValue,
-                      { color: theme.colors.text },
-                    ]}
+                    style={[styles.allocatedAmountValue, { color: theme.colors.text }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                   >
-                    KES {totalOutlay.toLocaleString()}
+                    {fmt(totalOutlay)}
                   </Text>
                 </View>
                 <View
@@ -464,10 +475,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                 />
                 <View style={{ flex: 1, alignItems: "center" }}>
                   <Text
-                    style={[
-                      styles.allocatedAmountLabel,
-                      { color: theme.colors.textSecondary },
-                    ]}
+                    style={[styles.allocatedAmountLabel, { color: theme.colors.textSecondary }]}
                   >
                     Balance
                   </Text>
@@ -481,8 +489,10 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                             : "#ef4444",
                       },
                     ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                   >
-                    KES {Math.max(pendingBalance - totalOutlay, 0).toLocaleString()}
+                    {fmt(Math.max(pendingBalance - totalOutlay, 0))}
                   </Text>
                 </View>
               </View>
@@ -588,50 +598,51 @@ const AddInvestmentScreen = ({ navigation, route }) => {
               />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text
-                style={[styles.label, { color: theme.colors.textSecondary }]}
-              >
-                Amount (KES) *
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.colors.background,
-                    borderColor: theme.colors.border,
-                    color: theme.colors.text,
-                  },
-                ]}
-                placeholder="Enter amount"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text
-                style={[styles.label, { color: theme.colors.textSecondary }]}
-              >
-                Transaction Cost (KES)
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.colors.background,
-                    borderColor: theme.colors.border,
-                    color: theme.colors.text,
-                  },
-                ]}
-                placeholder="Enter transaction cost"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={transactionCosts}
-                onChangeText={setTransactionCosts}
-                keyboardType="numeric"
-              />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <View style={{ flex: 0.7 }}>
+                <Text
+                  style={[styles.label, { color: theme.colors.textSecondary }]}
+                >
+                  Amount ({currencyCode}) *
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.background,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  placeholder="Enter amount"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={amount}
+                  onChangeText={setAmount}
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={{ flex: 0.3 }}>
+                <Text
+                  style={[styles.label, { color: theme.colors.textSecondary }]}
+                >
+                  Txn Cost ({currencyCode})
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.background,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  placeholder="0.00"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={transactionCosts}
+                  onChangeText={setTransactionCosts}
+                  keyboardType="numeric"
+                />
+              </View>
             </View>
 
             <View style={styles.inputGroup}>
@@ -689,7 +700,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                 <Text
                   style={[styles.totalAmount, { color: theme.colors.text }]}
                 >
-                  Outlay: KES {totalOutlay.toLocaleString()}
+                  Outlay: {fmt(totalOutlay)}
                 </Text>
               </View>
 
@@ -699,8 +710,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
                   { color: theme.colors.textSecondary, marginBottom: 12 },
                 ]}
               >
-                Principal: KES {totalInvested.toLocaleString()} | Fees: KES{" "}
-                {totalTransactionCosts.toLocaleString()}
+                Principal: {fmt(totalInvested)} | Fees: {fmt(totalTransactionCosts)}
               </Text>
 
               {investments.map((investment) => (
@@ -738,7 +748,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1,
   },
   backButton: {
     width: 40,
