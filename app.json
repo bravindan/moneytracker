@@ -20,7 +20,9 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.alkebu.moneytracker",
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "pan",
+      "buildToolsVersion": "36.0.0",
+      "ndkVersion": "27.1.12297006"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -47,7 +49,10 @@
           "android": {
             "enableProguardInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
-            "excludeFromJitpack": true
+            "excludeFromJitpack": true,
+            "packagingOptions": {
+              "pickFirsts": ["lib/armeabi-v7a/libc++_shared.so"]
+            }
           },
           "hermes": {
             "static": true
