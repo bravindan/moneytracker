@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import IOSSpinner from "../components/IOSSpinner";
+import * as SplashScreen from "expo-splash-screen";
 import { getCurrentUser, logoutUser } from "../services/authService";
 import {
   getMonthlySummary,
@@ -426,6 +427,13 @@ export default function DashboardScreen({ navigation }) {
   const [profileLoading, setProfileLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
+
+  // Hide splash screen once data loads
+  useEffect(() => {
+    if (!loading && !profileLoading) {
+      SplashScreen.hideAsync();
+    }
+  }, [loading, profileLoading]);
   const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
   const [showIncomeAmount, setShowIncomeAmount] = useState(false);
   const [showBalanceAmount, setShowBalanceAmount] = useState(false);
