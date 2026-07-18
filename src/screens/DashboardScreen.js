@@ -654,6 +654,21 @@ export default function DashboardScreen({ navigation }) {
     );
   };
 
+  const handleLogout = () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign Out",
+          style: "destructive",
+          onPress: logoutUser,
+        },
+      ],
+    );
+  };
+
   const handleSaveUnallocatedSpending = async () => {
     if (!unallocatedItem.trim()) {
       Alert.alert("Required", "Please enter an item name.");
@@ -745,7 +760,7 @@ export default function DashboardScreen({ navigation }) {
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={logoutUser}
+                onPress={handleLogout}
                 style={[
                   styles.signOutButton,
                   { borderColor: theme.colors.border },
@@ -918,7 +933,7 @@ export default function DashboardScreen({ navigation }) {
           </View>
           <TouchableOpacity
             style={[styles.signOutButton, { borderColor: theme.colors.border }]}
-            onPress={logoutUser}
+            onPress={handleLogout}
           >
             <Ionicons name="log-out-outline" size={20} color="#ef4444" />
           </TouchableOpacity>
