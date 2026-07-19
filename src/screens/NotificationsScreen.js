@@ -98,18 +98,47 @@ const NotificationsScreen = ({ navigation }) => {
 
     const messages = REMINDER_MESSAGES;
 
-    // Schedule recurring notifications
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "MoneyTracker Reminder",
-        body: messages[Math.floor(Math.random() * messages.length)],
-        sound: true,
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        interval: intervalMinutes * 60,
-      },
-    });
+    // For daily or less frequent: use DAILY trigger at current time
+    if (intervalMinutes >= 1440) {
+      const now = new Date();
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "MoneyTracker Reminder",
+          body: messages[Math.floor(Math.random() * messages.length)],
+          sound: true,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour: now.getHours(),
+          minute: now.getMinutes(),
+        },
+      });
+    } else {
+      // For more frequent: schedule multiple notifications at intervals throughout the day
+      const notificationsPerDay = Math.floor(1440 / intervalMinutes);
+      const now = new Date();
+      const startHour = now.getHours();
+      const startMinute = now.getMinutes();
+
+      for (let i = 0; i < notificationsPerDay; i++) {
+        const totalMinutes = (startMinute + i * intervalMinutes) % 1440;
+        const hour = Math.floor(totalMinutes / 60);
+        const minute = totalMinutes % 60;
+
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "MoneyTracker Reminder",
+            body: messages[Math.floor(Math.random() * messages.length)],
+            sound: true,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            hour,
+            minute,
+          },
+        });
+      }
+    }
   };
 
   const toggleNotifications = async (value) => {

@@ -147,17 +147,32 @@ const ReportsScreen = ({ navigation, route }) => {
       // Aggregate data
       const totalIncome = results.reduce((sum, r) => sum + (r.summary?.income || 0), 0);
       const totalExpensesAllocated = results.reduce((sum, r) => sum + (r.summary?.expensesAmount || 0), 0);
-      const totalSpent = results.reduce((sum, r) => sum + r.spendings.reduce((s, sp) => s + (sp.totalSpending || sp.amount || 0), 0), 0);
+      const totalSpent = results.reduce((sum, r) => {
+        const customNames = Array.isArray(r.summary?.allocations)
+          ? r.summary.allocations.filter((a) => a.key === "custom").map((a) => a.name)
+          : [];
+        return sum + r.spendings
+          .filter((sp) => sp.category !== "Unallocated" && !customNames.includes(sp.category))
+          .reduce((s, sp) => s + (sp.totalSpending || sp.amount || 0), 0);
+      }, 0);
       const totalInvested = results.reduce((sum, r) => sum + r.investments.reduce((s, i) => s + (i.amount || 0), 0), 0);
       const totalInvestmentCosts = results.reduce((sum, r) => sum + r.investments.reduce((s, i) => s + (i.transactionCosts || 0), 0), 0);
       const allSpendings = results.flatMap(r => r.spendings);
       const allInvestments = results.flatMap(r => r.investments);
 
-      // Category totals across period
+      // Category totals across period (only expense categories)
+      const allCustomNames = results.flatMap((r) =>
+        Array.isArray(r.summary?.allocations)
+          ? r.summary.allocations.filter((a) => a.key === "custom").map((a) => a.name)
+          : []
+      );
+      const uniqueCustomNames = [...new Set(allCustomNames)];
       const categoryTotals = {};
-      allSpendings.forEach((s) => {
-        categoryTotals[s.category] = (categoryTotals[s.category] || 0) + (s.totalSpending || s.amount || 0);
-      });
+      allSpendings
+        .filter((s) => s.category !== "Unallocated" && !uniqueCustomNames.includes(s.category))
+        .forEach((s) => {
+          categoryTotals[s.category] = (categoryTotals[s.category] || 0) + (s.totalSpending || s.amount || 0);
+        });
 
       setPeriodData({
         months,
@@ -185,17 +200,36 @@ const ReportsScreen = ({ navigation, route }) => {
   }, [fetchPeriodData, reportMode]);
 
   const handlePrint = async () => {
-    if (!reportData?.summary) return;
+    if (!reportData?.summary && !periodData) return;
     setPrinting(true);
     try {
-      const { summary, spendings, investments } = reportData;
+      const printData = reportMode !== "monthly" && periodData
+        ? {
+            summary: {
+              income: periodData.totalIncome,
+              expensesAmount: periodData.totalExpensesAllocated,
+              investmentAmount: periodData.totalInvested,
+              balance: 0,
+              allocations: [],
+            },
+            spendings: periodData.allSpendings,
+            investments: periodData.allInvestments,
+          }
+        : reportData;
+      const { summary, spendings, investments } = printData;
       const totalAllocated = summary.expensesAmount || 0;
-      const totalSpent = spendings.reduce(
-        (acc, s) => acc + (s.totalSpending || s.amount || 0), 0,
-      );
-      const totalTxnCosts = spendings.reduce(
-        (acc, s) => acc + (s.transactionCosts || 0), 0,
-      );
+
+      // Get custom allocation names to exclude
+      const customNames = Array.isArray(summary?.allocations)
+        ? summary.allocations.filter((a) => a.key === "custom").map((a) => a.name)
+        : [];
+
+      const totalSpent = spendings
+        .filter((s) => s.category !== "Unallocated" && !customNames.includes(s.category))
+        .reduce((acc, s) => acc + (s.totalSpending || s.amount || 0), 0);
+      const totalTxnCosts = spendings
+        .filter((s) => s.category !== "Unallocated" && !customNames.includes(s.category))
+        .reduce((acc, s) => acc + (s.transactionCosts || 0), 0);
       const totalInvested = investments.reduce(
         (acc, i) => acc + (i.amount || 0), 0,
       );
@@ -207,11 +241,13 @@ const ReportsScreen = ({ navigation, route }) => {
         .filter((s) => s.category === "Unallocated")
         .reduce((sum, s) => sum + (s.totalSpending || s.amount || 0), 0);
 
-      // Category breakdown
+      // Category breakdown (only expense categories)
       const categoryTotals = {};
-      spendings.forEach((s) => {
-        categoryTotals[s.category] = (categoryTotals[s.category] || 0) + (s.totalSpending || s.amount || 0);
-      });
+      spendings
+        .filter((s) => s.category !== "Unallocated" && !customNames.includes(s.category))
+        .forEach((s) => {
+          categoryTotals[s.category] = (categoryTotals[s.category] || 0) + (s.totalSpending || s.amount || 0);
+        });
 
       const html = `
         <html>
@@ -361,7 +397,7 @@ const ReportsScreen = ({ navigation, route }) => {
     );
   }
 
-  if (!reportData?.summary) {
+  if (!reportData?.summary && !periodData) {
     return (
       <View
         style={[
@@ -410,14 +446,41 @@ const ReportsScreen = ({ navigation, route }) => {
     );
   }
 
-  const { summary, spendings, investments } = reportData;
+  // Use periodData when in period mode, otherwise use reportData
+  const activeData = reportMode !== "monthly" && periodData
+    ? {
+        summary: {
+          income: periodData.totalIncome,
+          expensesAmount: periodData.totalExpensesAllocated,
+          investmentAmount: periodData.totalInvested,
+          balance: 0,
+          allocations: [],
+        },
+        spendings: periodData.allSpendings,
+        investments: periodData.allInvestments,
+      }
+    : reportData;
+
+  const { summary, spendings, investments } = activeData;
   const totalAllocated = summary.expensesAmount || 0;
-  const spent = spendings.reduce(
-    (acc, curr) => acc + (curr.totalSpending || curr.amount || 0), 0,
-  );
-  const totalTxnCosts = spendings.reduce(
-    (acc, curr) => acc + (curr.transactionCosts || 0), 0,
-  );
+
+  // Get custom allocation names to exclude from expenses
+  const customAllocationNames = Array.isArray(summary?.allocations)
+    ? summary.allocations
+        .filter((a) => a.key === "custom")
+        .map((a) => a.name)
+    : [];
+
+  const spent = spendings
+    .filter((s) => s.category !== "Unallocated" && !customAllocationNames.includes(s.category))
+    .reduce(
+      (acc, curr) => acc + (curr.totalSpending || curr.amount || 0), 0,
+    );
+  const totalTxnCosts = spendings
+    .filter((s) => s.category !== "Unallocated" && !customAllocationNames.includes(s.category))
+    .reduce(
+      (acc, curr) => acc + (curr.transactionCosts || 0), 0,
+    );
   const totalInvestmentTxnCosts = investments.reduce(
     (acc, curr) => acc + (curr.transactionCosts || 0), 0,
   );
@@ -436,9 +499,11 @@ const ReportsScreen = ({ navigation, route }) => {
   const investmentRate = summary.income > 0 ? (totalInvested / summary.income) * 100 : 0;
 
   const categoryTotals = {};
-  spendings.forEach((s) => {
-    categoryTotals[s.category] = (categoryTotals[s.category] || 0) + (s.totalSpending || s.amount || 0);
-  });
+  spendings
+    .filter((s) => s.category !== "Unallocated" && !customAllocationNames.includes(s.category))
+    .forEach((s) => {
+      categoryTotals[s.category] = (categoryTotals[s.category] || 0) + (s.totalSpending || s.amount || 0);
+    });
   const sortedCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
   const highestCategory = sortedCategories[0];
   const lowestCategory = sortedCategories[sortedCategories.length - 1];
@@ -715,7 +780,7 @@ const ReportsScreen = ({ navigation, route }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: 16 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.tabBarActive]} progressBackgroundColor={theme.colors.card} tintColor={theme.colors.tabBarActive} />
         }
       >
         <Text

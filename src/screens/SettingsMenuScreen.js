@@ -1,12 +1,69 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, Linking, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
+import { getCurrentUser } from '../services/authService';
+import { getUserProfile, updateUserProfile } from '../services/firestoreService';
+import { isBiometricAvailable, getBiometricSetting, setBiometricSetting } from '../services/biometricService';
 
 const SettingsMenuScreen = ({ navigation }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  
+  const user = getCurrentUser();
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const enabled = await getBiometricSetting();
+      setBiometricEnabled(enabled);
+      const available = await isBiometricAvailable();
+      setBiometricAvailable(available);
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    }
+  };
+
+  const toggleBiometric = async (value) => {
+    if (value) {
+      const available = await isBiometricAvailable();
+      if (!available) {
+        Alert.alert(
+          'Biometric Not Available',
+          'No fingerprint or face ID is enrolled on this device. Please set up biometrics in your device settings first.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: () => {
+                if (Platform.OS === 'android') {
+                  Linking.openSettings();
+                } else {
+                  Linking.openURL('app-settings:');
+                }
+              },
+            },
+          ]
+        );
+        return;
+      }
+      setBiometricEnabled(true);
+      await setBiometricSetting(true);
+      Alert.alert(
+        'Fingerprint Login Enabled',
+        'You can now use your fingerprint to sign in. Make sure you have saved your password at least once.'
+      );
+    } else {
+      setBiometricEnabled(false);
+      await setBiometricSetting(false);
+    }
+  };
+
   const menuItems = [
     {
       title: 'Profile',
@@ -19,6 +76,17 @@ const SettingsMenuScreen = ({ navigation }) => {
       subtitle: 'Set spending reminders and alerts',
       icon: 'notifications-outline',
       screen: 'Notifications',
+    },
+    {
+      title: 'Fingerprint Login',
+      subtitle: biometricAvailable
+        ? (biometricEnabled ? 'Enabled — tap to disable' : 'Disabled — tap to enable')
+        : 'Not available on this device',
+      icon: 'finger-print-outline',
+      toggle: true,
+      value: biometricEnabled,
+      onToggle: toggleBiometric,
+      disabled: !biometricAvailable,
     },
     {
       title: 'Currency',
@@ -36,8 +104,8 @@ const SettingsMenuScreen = ({ navigation }) => {
 
   return (
     <View style={[
-      styles.container, 
-      { 
+      styles.container,
+      {
         backgroundColor: theme.colors.background,
         paddingTop: insets.top
       }
@@ -62,20 +130,43 @@ const SettingsMenuScreen = ({ navigation }) => {
                 styles.menuItem,
                 { borderBottomColor: theme.colors.border }
               ]}
-              onPress={() => navigation.navigate(item.screen)}
+              onPress={() => {
+                if (item.toggle) {
+                  if (!item.disabled) {
+                    item.onToggle(!item.value);
+                  }
+                } else {
+                  navigation.navigate(item.screen);
+                }
+              }}
+              disabled={item.disabled}
             >
               <View style={[styles.menuIconContainer, { backgroundColor: theme.colors.tabBarFocused }]}>
-                <Ionicons name={item.icon} size={24} color={theme.isDark ? '#ffffff' : theme.colors.tabBarActive} />
+                <Ionicons name={item.icon} size={24} color={item.disabled ? theme.colors.textSecondary : (theme.isDark ? '#ffffff' : theme.colors.tabBarActive)} />
               </View>
               <View style={styles.menuTextContainer}>
-                <Text style={[styles.menuTitle, { color: theme.colors.text }]}>
+                <Text style={[styles.menuTitle, { color: item.disabled ? theme.colors.textSecondary : theme.colors.text }]}>
                   {item.title}
                 </Text>
                 <Text style={[styles.menuSubtitle, { color: theme.colors.textSecondary }]}>
                   {item.subtitle}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward-outline" size={20} color={theme.colors.textSecondary} />
+              {item.toggle ? (
+                <Switch
+                  value={item.value}
+                  onValueChange={() => {
+                    if (!item.disabled) {
+                      item.onToggle(!item.value);
+                    }
+                  }}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.tabBarActive + '60' }}
+                  thumbColor={item.value ? theme.colors.tabBarActive : '#f4f3f4'}
+                  disabled={item.disabled}
+                />
+              ) : (
+                <Ionicons name="chevron-forward-outline" size={20} color={theme.colors.textSecondary} />
+              )}
             </TouchableOpacity>
           ))}
         </View>

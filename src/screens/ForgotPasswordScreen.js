@@ -7,12 +7,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ActivityIndicator,
   StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
+import IOSSpinner from "../components/IOSSpinner";
 import { resetPassword } from "../services/authService";
 
 export default function ForgotPasswordScreen({ navigation }) {
@@ -174,7 +174,7 @@ export default function ForgotPasswordScreen({ navigation }) {
             ]}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <IOSSpinner size={18} color="#fff" />
             ) : (
               <Text style={styles.submitText}>Send Reset Link</Text>
             )}

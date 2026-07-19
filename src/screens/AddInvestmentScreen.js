@@ -36,7 +36,6 @@ const AddInvestmentScreen = ({ navigation, route }) => {
   const [transactionCosts, setTransactionCosts] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [investments, setInvestments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,15 +44,6 @@ const AddInvestmentScreen = ({ navigation, route }) => {
     route?.params?.selectedMonth || getCurrentMonth(),
   ); // YYYY-MM format;
   const [allocatedAmount, setAllocatedAmount] = useState(0);
-
-  const categories = [
-    "Stocks & Shares",
-    "Real Estate",
-    "MMF",
-    "FIF",
-    "Sinking fund",
-    "Special fund",
-  ];
 
   const user = getCurrentUser();
   const uid = user?.uid;
@@ -392,11 +382,11 @@ const AddInvestmentScreen = ({ navigation, route }) => {
             styles.scrollContainer,
             { paddingBottom: insets.bottom + 140 },
           ]}
-          scrollEnabled={!showCategoryDropdown}
+          scrollEnabled={true}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.tabBarActive]} progressBackgroundColor={theme.colors.card} tintColor={theme.colors.tabBarActive} />
           }
         >
           {/* Add Investment Form */}
@@ -494,72 +484,20 @@ const AddInvestmentScreen = ({ navigation, route }) => {
               >
                 Category *
               </Text>
-              <TouchableOpacity
+              <TextInput
                 style={[
-                  styles.dropdownButton,
+                  styles.input,
                   {
                     backgroundColor: theme.colors.background,
                     borderColor: theme.colors.border,
+                    color: theme.colors.text,
                   },
                 ]}
-                onPress={() => setShowCategoryDropdown(!showCategoryDropdown)}
-              >
-                <Text
-                  style={[
-                    styles.dropdownText,
-                    {
-                      color: category
-                        ? theme.colors.text
-                        : theme.colors.textSecondary,
-                    },
-                  ]}
-                >
-                  {category || "Select category"}
-                </Text>
-                <Ionicons
-                  name="chevron-down"
-                  size={16}
-                  color={theme.colors.textSecondary}
-                />
-              </TouchableOpacity>
-
-              {showCategoryDropdown && (
-                <View
-                  style={[
-                    styles.dropdownContainer,
-                    {
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
-                >
-                  <ScrollView
-                    nestedScrollEnabled={true}
-                    showsVerticalScrollIndicator={true}
-                    style={styles.dropdownScroll}
-                  >
-                    {categories.map((cat) => (
-                      <TouchableOpacity
-                        key={cat}
-                        style={styles.dropdownItem}
-                        onPress={() => {
-                          setCategory(cat);
-                          setShowCategoryDropdown(false);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.dropdownItemText,
-                            { color: theme.colors.text },
-                          ]}
-                        >
-                          {cat}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
+                placeholder="Type category name..."
+                placeholderTextColor={theme.colors.textSecondary}
+                value={category}
+                onChangeText={setCategory}
+              />
             </View>
 
             <View style={styles.inputGroup}>

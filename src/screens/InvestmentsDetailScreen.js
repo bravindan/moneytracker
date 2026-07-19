@@ -281,9 +281,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
           { backgroundColor: theme.colors.background, paddingTop: insets.top },
         ]}
       >
-        <Text style={{ color: theme.colors.textSecondary }}>
-          Loading investments...
-        </Text>
+        <IOSSpinner size={40} color={theme.colors.tabBarActive} />
       </View>
     );
   }
@@ -327,7 +325,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.tabBarActive]} progressBackgroundColor={theme.colors.card} tintColor={theme.colors.tabBarActive} />
         }
       >
         {/* Summary */}

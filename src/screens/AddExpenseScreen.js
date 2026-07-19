@@ -75,9 +75,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
   // Expenses list
   const [expenses, setExpenses] = useState([]);
 
-  // Dropdown states
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [filteredCategories, setFilteredCategories] = useState([]);
+
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
@@ -164,46 +162,6 @@ const AddExpenseScreen = ({ navigation, route }) => {
     return newTotal > 0
       ? ((parseFloat(expenseAmount || 0) / allocatedAmount) * 100).toFixed(1)
       : "0";
-  };
-
-  // Filter categories based on input
-  const filterCategories = (text) => {
-    const trimmed = text.trim();
-    if (!trimmed) {
-      setFilteredCategories([]);
-      setShowDropdown(false);
-      return;
-    }
-
-    const userCategories = expenses
-      .map((expense) => (expense.category || "").trim())
-      .filter((cat) => cat);
-
-    const seen = new Set();
-    const deduped = [];
-
-    const add = (cat) => {
-      const key = cat.toLowerCase();
-      if (key && !seen.has(key)) {
-        seen.add(key);
-        deduped.push(cat);
-      }
-    };
-
-    predefinedCategories.forEach(add);
-    userCategories.forEach(add);
-
-    const query = trimmed.toLowerCase();
-    const filtered = deduped.filter((cat) => cat.toLowerCase().includes(query));
-    setFilteredCategories(filtered);
-    setShowDropdown(true);
-  };
-
-  // Select category from dropdown
-  const selectCategory = (selectedCategory) => {
-    setCategory(selectedCategory);
-    setShowDropdown(false);
-    setFilteredCategories([]);
   };
 
   // Clear form
@@ -293,24 +251,6 @@ const AddExpenseScreen = ({ navigation, route }) => {
       ],
     );
   };
-
-  // Render dropdown item
-  const renderDropdownItem = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.dropdownItem,
-        {
-          backgroundColor: theme.colors.card,
-          borderColor: theme.colors.border,
-        },
-      ]}
-      onPress={() => selectCategory(item)}
-    >
-      <Text style={[styles.dropdownItemText, { color: theme.colors.text }]}>
-        {item}
-      </Text>
-    </TouchableOpacity>
-  );
 
   // Render expense item
   const renderExpenseItem = ({ item: expense }) => {
@@ -460,52 +400,20 @@ const AddExpenseScreen = ({ navigation, route }) => {
                 <Text style={[styles.label, { color: theme.colors.text }]}>
                   Category:
                 </Text>
-                <View style={styles.inputWithDropdown}>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: theme.colors.background,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.text,
-                        borderTopRightRadius: showDropdown ? 0 : 8,
-                      },
-                    ]}
-                    placeholder="Type category name..."
-                    placeholderTextColor={theme.colors.textSecondary}
-                    value={category}
-                    onChangeText={(text) => {
-                      setCategory(text);
-                      filterCategories(text);
-                    }}
-                    onFocus={() => {
-                      if (category) {
-                        filterCategories(category);
-                      }
-                    }}
-                  />
-                  {showDropdown && (
-                    <View
-                      style={[
-                        styles.dropdownContainer,
-                        {
-                          backgroundColor: theme.colors.card,
-                          borderColor: theme.colors.border,
-                          borderTopWidth: 0,
-                          borderTopRightRadius: 0,
-                        },
-                      ]}
-                    >
-                      <FlatList
-                        data={filteredCategories}
-                        renderItem={renderDropdownItem}
-                        keyExtractor={(item, index) => `category-${index}`}
-                        style={{ maxHeight: 150 }}
-                        showsVerticalScrollIndicator={false}
-                      />
-                    </View>
-                  )}
-                </View>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.background,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  placeholder="Type category name..."
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={category}
+                  onChangeText={setCategory}
+                />
               </View>
 
               <View style={styles.inputGroup}>
@@ -607,7 +515,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
                   keyExtractor={(item) => item.id}
                   scrollEnabled={false}
                   refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.tabBarActive]} progressBackgroundColor={theme.colors.card} tintColor={theme.colors.tabBarActive} />
                   }
                 />
               </View>

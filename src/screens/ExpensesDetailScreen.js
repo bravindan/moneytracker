@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
+import IOSSpinner from "../components/IOSSpinner";
 import { getCurrentUser } from "../services/authService";
 import {
   getExpenses,
@@ -60,6 +61,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
     route?.params?.selectedMonth || getCurrentMonth(),
   ); // YYYY-MM format
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [monthlyData, setMonthlyData] = useState(null);
   const [allSpending, setAllSpending] = useState([]);
 
@@ -135,8 +137,16 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   );
 
   const totalAllocated = monthlyData?.expensesAmount || 0;
+
+  // Get custom allocation names to exclude from expenses
+  const customAllocationNames = Array.isArray(monthlyData?.allocations)
+    ? monthlyData.allocations
+        .filter((a) => a.key === "custom")
+        .map((a) => a.name)
+    : [];
+
   const totalSpent = allSpending
-    .filter((s) => s.category !== "Unallocated")
+    .filter((s) => s.category !== "Unallocated" && !customAllocationNames.includes(s.category))
     .reduce(
       (sum, spending) => sum + (spending.totalSpending || spending.amount || 0),
       0,
@@ -165,8 +175,20 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
     setSpendingDate(new Date());
   };
 
+  // Calculate the first day of the selected month for date validation
+  const getFirstDayOfMonth = () => {
+    if (!selectedMonth) return new Date(0);
+    const [year, month] = selectedMonth.split("-").map(Number);
+    return new Date(year, month - 1, 1);
+  };
+
   // Handle date selection
   const handleDateSelect = (date) => {
+    const firstDay = getFirstDayOfMonth();
+    if (date < firstDay) {
+      Alert.alert("Invalid Date", "Cannot select a date before the start of the record month.");
+      return;
+    }
     setSpendingDate(date);
     setShowDatePicker(false);
   };
@@ -188,7 +210,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
     try {
       const todayDate = new Date().toLocaleDateString();
       const totalTxnCosts = allSpending
-        .filter((s) => s.category !== "Unallocated")
+        .filter((s) => s.category !== "Unallocated" && !customAllocationNames.includes(s.category))
         .reduce(
           (sum, s) => sum + (s.transactionCosts || 0),
           0,
@@ -289,9 +311,11 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
       const date = new Date(year, month, i);
       const isSelected = date.toDateString() === spendingDate.toDateString();
       const isToday = date.toDateString() === new Date().toDateString();
+      const isBeforeMonth = date < getFirstDayOfMonth();
       days.push(
         <TouchableOpacity
           key={i}
+          disabled={isBeforeMonth}
           style={[
             {
               width: "14.28%",
@@ -300,6 +324,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
               alignItems: "center",
               marginBottom: 4,
               borderRadius: 18,
+              opacity: isBeforeMonth ? 0.3 : 1,
             },
             isSelected && { backgroundColor: theme.colors.tabBarActive },
           ]}
@@ -333,6 +358,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
       return;
     }
 
+    setSaving(true);
     try {
       const amount = parseFloat(spendingAmount);
       const transactionCost = parseFloat(transactionCosts) || 0;
@@ -372,6 +398,8 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
     } catch (error) {
       console.error("Error saving spending:", error);
       Alert.alert("Error", "Failed to save spending");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -415,17 +443,13 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <Text
-            style={[styles.loadingText, { color: theme.colors.textSecondary }]}
-          >
-            Loading expenses...
-          </Text>
+          <IOSSpinner size={40} color={theme.colors.tabBarActive} />
         </View>
       ) : (
         <ScrollView
           contentContainerStyle={styles.scrollContainer}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.tabBarActive]} progressBackgroundColor={theme.colors.card} tintColor={theme.colors.tabBarActive} />
           }
         >
           {/* Summary */}
@@ -510,15 +534,31 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
           </Text>
           {expenses.length === 0 ? (
             <View style={styles.emptyContainer}>
+              <Ionicons name="cart-outline" size={48} color={theme.colors.textSecondary} style={{ marginBottom: 12 }} />
               <Text
                 style={[
                   styles.emptyText,
-                  { color: theme.colors.textSecondary },
+                  { color: theme.colors.textSecondary, marginBottom: 20 },
                 ]}
               >
                 No expense categories recorded yet. Add expense categories to
                 see them here.
               </Text>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: theme.colors.tabBarActive,
+                  paddingHorizontal: 24,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+                onPress={() => navigation.navigate("AddExpense", { selectedMonth })}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#fff" />
+                <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>Add Expense Category</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             expenses.map((expense, index) => (
@@ -854,11 +894,16 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
               <TouchableOpacity
                 style={[
                   styles.saveModalButton,
-                  { backgroundColor: theme.colors.tabBarActive },
+                  { backgroundColor: saving ? theme.colors.textSecondary : theme.colors.tabBarActive },
                 ]}
                 onPress={handleSaveSpending}
+                disabled={saving}
               >
-                <Text style={styles.saveModalButtonText}>Save Spending</Text>
+                {saving ? (
+                  <IOSSpinner size={18} color="#fff" />
+                ) : (
+                  <Text style={styles.saveModalButtonText}>Save Spending</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
