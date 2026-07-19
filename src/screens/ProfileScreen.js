@@ -110,35 +110,21 @@ const ProfileScreen = ({ navigation }) => {
     if (!uid) return;
     setUploading(true);
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // Read image as base64 and convert to bytes for upload
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
       const filename = `profilePictures/${uid}.jpg`;
       const storageRef = ref(storage, filename);
-      await uploadBytes(storageRef, blob);
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      await uploadBytes(storageRef, bytes);
       const downloadURL = await getDownloadURL(storageRef);
       await updateUserProfile(uid, { profileImage: downloadURL });
       setProfileImage(downloadURL);
       Alert.alert('Success', 'Profile picture updated!');
     } catch (error) {
       console.error('Failed to upload image:', error);
-      // Fallback: try reading as base64
-      try {
-        const base64 = await FileSystem.readAsStringAsync(uri, {
-          mediaType: FileSystem.MediaTypeOptions.Images,
-          base64: true,
-        });
-        const filename = `profilePictures/${uid}.jpg`;
-        const storageRef = ref(storage, filename);
-        const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-        await uploadBytes(storageRef, bytes);
-        const downloadURL = await getDownloadURL(storageRef);
-        await updateUserProfile(uid, { profileImage: downloadURL });
-        setProfileImage(downloadURL);
-        Alert.alert('Success', 'Profile picture updated!');
-      } catch (fallbackError) {
-        console.error('Failed to upload image (fallback):', fallbackError);
-        Alert.alert('Error', 'Could not upload image. Please try again.');
-      }
+      Alert.alert('Error', 'Could not upload image. Please try again.');
     } finally {
       setUploading(false);
     }
