@@ -22,6 +22,7 @@ import { getUserProfile, updateUserProfile, deleteAllUserData } from '../service
 import { storage } from '../config/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 
 const ProfileScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -94,7 +95,7 @@ const ProfileScreen = ({ navigation }) => {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -120,7 +121,24 @@ const ProfileScreen = ({ navigation }) => {
       Alert.alert('Success', 'Profile picture updated!');
     } catch (error) {
       console.error('Failed to upload image:', error);
-      Alert.alert('Error', 'Could not upload image. Please try again.');
+      // Fallback: try reading as base64
+      try {
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          mediaType: FileSystem.MediaTypeOptions.Images,
+          base64: true,
+        });
+        const filename = `profilePictures/${uid}.jpg`;
+        const storageRef = ref(storage, filename);
+        const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+        await uploadBytes(storageRef, bytes);
+        const downloadURL = await getDownloadURL(storageRef);
+        await updateUserProfile(uid, { profileImage: downloadURL });
+        setProfileImage(downloadURL);
+        Alert.alert('Success', 'Profile picture updated!');
+      } catch (fallbackError) {
+        console.error('Failed to upload image (fallback):', fallbackError);
+        Alert.alert('Error', 'Could not upload image. Please try again.');
+      }
     } finally {
       setUploading(false);
     }
