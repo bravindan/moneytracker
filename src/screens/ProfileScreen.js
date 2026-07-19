@@ -22,7 +22,7 @@ import { getUserProfile, updateUserProfile, deleteAllUserData } from '../service
 import { storage } from '../config/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import { readAsStringAsync, EncodingType } from 'expo-file-system';
 
 const ProfileScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -113,9 +113,11 @@ const ProfileScreen = ({ navigation }) => {
       const filename = `profilePictures/${uid}.jpg`;
       const storageRef = ref(storage, filename);
 
-      // Use new expo-file-system File API
-      const file = new File(uri);
-      const bytes = await file.bytes();
+      // Read image as base64 using legacy import
+      const base64 = await readAsStringAsync(uri, {
+        encoding: EncodingType.Base64,
+      });
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
       await uploadBytes(storageRef, bytes);
 
       const downloadURL = await getDownloadURL(storageRef);
