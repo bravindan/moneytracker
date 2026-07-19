@@ -228,11 +228,6 @@ const ReportsScreen = ({ navigation, route }) => {
         .filter((s) => s.category === "Unallocated")
         .reduce((sum, s) => sum + (s.totalSpending || s.amount || 0), 0);
 
-      // Get custom allocation names to exclude
-      const customNames = Array.isArray(summary?.allocations)
-        ? summary.allocations.filter((a) => a.key === "custom").map((a) => a.name)
-        : [];
-
       // Category breakdown (only expense categories)
       const categoryTotals = {};
       spendings
