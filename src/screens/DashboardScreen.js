@@ -524,6 +524,13 @@ export default function DashboardScreen({ navigation }) {
     setRefreshing(false);
   }, [fetchProfile, fetchMonthlyData]);
 
+  // Get custom allocation names to exclude from expenses calculation
+  const customAllocationNames = Array.isArray(monthlyData?.allocations)
+    ? monthlyData.allocations
+        .filter((a) => a.key === "custom")
+        .map((a) => a.name)
+    : [];
+
   const financialData = monthlyData
     ? {
         income: monthlyData.income || 0,
@@ -537,7 +544,7 @@ export default function DashboardScreen({ navigation }) {
         expenses: {
           allocated: monthlyData.expensesAmount || 0,
           spent: allSpending
-            .filter((s) => s.category !== "Unallocated")
+            .filter((s) => s.category !== "Unallocated" && !customAllocationNames.includes(s.category))
             .reduce(
               (sum, spending) =>
                 sum + (spending.totalSpending || spending.amount || 0),
@@ -546,7 +553,7 @@ export default function DashboardScreen({ navigation }) {
           remaining:
             (monthlyData.expensesAmount || 0) -
             allSpending
-              .filter((s) => s.category !== "Unallocated")
+              .filter((s) => s.category !== "Unallocated" && !customAllocationNames.includes(s.category))
               .reduce(
                 (sum, spending) =>
                   sum + (spending.totalSpending || spending.amount || 0),
