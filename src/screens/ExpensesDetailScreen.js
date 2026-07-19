@@ -175,8 +175,20 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
     setSpendingDate(new Date());
   };
 
+  // Calculate the first day of the selected month for date validation
+  const getFirstDayOfMonth = () => {
+    if (!selectedMonth) return new Date(0);
+    const [year, month] = selectedMonth.split("-").map(Number);
+    return new Date(year, month - 1, 1);
+  };
+
   // Handle date selection
   const handleDateSelect = (date) => {
+    const firstDay = getFirstDayOfMonth();
+    if (date < firstDay) {
+      Alert.alert("Invalid Date", "Cannot select a date before the start of the record month.");
+      return;
+    }
     setSpendingDate(date);
     setShowDatePicker(false);
   };
@@ -299,9 +311,11 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
       const date = new Date(year, month, i);
       const isSelected = date.toDateString() === spendingDate.toDateString();
       const isToday = date.toDateString() === new Date().toDateString();
+      const isBeforeMonth = date < getFirstDayOfMonth();
       days.push(
         <TouchableOpacity
           key={i}
+          disabled={isBeforeMonth}
           style={[
             {
               width: "14.28%",
@@ -310,6 +324,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
               alignItems: "center",
               marginBottom: 4,
               borderRadius: 18,
+              opacity: isBeforeMonth ? 0.3 : 1,
             },
             isSelected && { backgroundColor: theme.colors.tabBarActive },
           ]}

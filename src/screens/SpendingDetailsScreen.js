@@ -70,8 +70,20 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerMonthDate, setPickerMonthDate] = useState(new Date());
 
-  // Date picker helpers (mirrors the picker on the expenses detail screen)
+  // Calculate the first day of the selected month for date validation
+  const getFirstDayOfMonth = () => {
+    if (!selectedMonth) return new Date(0);
+    const [year, month] = selectedMonth.split("-").map(Number);
+    return new Date(year, month - 1, 1);
+  };
+
+  // Date picker helpers
   const handleDateSelect = (selected) => {
+    const firstDay = getFirstDayOfMonth();
+    if (selected < firstDay) {
+      Alert.alert("Invalid Date", "Cannot select a date before the start of the record month.");
+      return;
+    }
     setDate(selected);
     setShowDatePicker(false);
   };
@@ -106,9 +118,11 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
       const dayDate = new Date(year, month, i);
       const isSelected = dayDate.toDateString() === date.toDateString();
       const isToday = dayDate.toDateString() === new Date().toDateString();
+      const isBeforeMonth = dayDate < getFirstDayOfMonth();
       days.push(
         <TouchableOpacity
           key={i}
+          disabled={isBeforeMonth}
           style={[
             {
               width: "14.28%",
@@ -117,6 +131,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
               alignItems: "center",
               marginBottom: 4,
               borderRadius: 18,
+              opacity: isBeforeMonth ? 0.3 : 1,
             },
             isSelected && { backgroundColor: theme.colors.tabBarActive },
           ]}
