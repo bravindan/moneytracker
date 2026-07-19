@@ -515,15 +515,31 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
           </Text>
           {expenses.length === 0 ? (
             <View style={styles.emptyContainer}>
+              <Ionicons name="cart-outline" size={48} color={theme.colors.textSecondary} style={{ marginBottom: 12 }} />
               <Text
                 style={[
                   styles.emptyText,
-                  { color: theme.colors.textSecondary },
+                  { color: theme.colors.textSecondary, marginBottom: 20 },
                 ]}
               >
                 No expense categories recorded yet. Add expense categories to
                 see them here.
               </Text>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: theme.colors.tabBarActive,
+                  paddingHorizontal: 24,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+                onPress={() => navigation.navigate("AddExpense", { selectedMonth })}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#fff" />
+                <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>Add Expense Category</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             expenses.map((expense, index) => (
