@@ -137,8 +137,16 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   );
 
   const totalAllocated = monthlyData?.expensesAmount || 0;
+
+  // Get custom allocation names to exclude from expenses
+  const customAllocationNames = Array.isArray(monthlyData?.allocations)
+    ? monthlyData.allocations
+        .filter((a) => a.key === "custom")
+        .map((a) => a.name)
+    : [];
+
   const totalSpent = allSpending
-    .filter((s) => s.category !== "Unallocated")
+    .filter((s) => s.category !== "Unallocated" && !customAllocationNames.includes(s.category))
     .reduce(
       (sum, spending) => sum + (spending.totalSpending || spending.amount || 0),
       0,
@@ -190,7 +198,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
     try {
       const todayDate = new Date().toLocaleDateString();
       const totalTxnCosts = allSpending
-        .filter((s) => s.category !== "Unallocated")
+        .filter((s) => s.category !== "Unallocated" && !customAllocationNames.includes(s.category))
         .reduce(
           (sum, s) => sum + (s.transactionCosts || 0),
           0,
