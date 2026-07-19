@@ -1,0 +1,38 @@
+MoneyTracker Update - Release Notes
+
+Authentication & Security:
+- Email-based login and registration (phone only for signup)
+- Forgot password screen with email verification
+- Fingerprint/biometric login with settings toggle
+- Account deletion with password confirmation
+- Duplicate email check during registration
+
+Dashboard & Reports:
+- Collapsible AI recommendations card
+- Auto month switch toggle
+- Unallocated spending tracking with Allocated/Spent/Remaining
+- Custom allocation cards with full action buttons (eye, +, >)
+- Quarterly and annual reports with proper data aggregation
+- Print report with PDF generation
+- Investment card balance calculation fix
+
+UI Improvements:
+- Custom iOS-style spinner across all screens
+- Loading states on all save/submit buttons
+- Removed white dividers from settings and screens
+- Collapsible AI recommendations
+- Pull-to-refresh on all detail screens
+- Date validation preventing past-month entries
+- Consistent card styling with inline percentages
+
+New Features:
+- Notifications settings with configurable reminders
+- Print/export monthly reports
+- Periodic report support (quarterly, annual, custom)
+
+Bug Fixes:
+- Investment balance calculation fix
+- Spending isolation between allocations
+- Currency consistency across all screens
+- Loading text removed, spinner only
+- Logout confirmation dialog
