@@ -752,7 +752,7 @@ const ReportsScreen = ({ navigation, route }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: 16 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.tabBarActive]} progressBackgroundColor={theme.colors.card} tintColor={theme.colors.tabBarActive} />
         }
       >
         <Text

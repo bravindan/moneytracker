@@ -515,7 +515,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
                   keyExtractor={(item) => item.id}
                   scrollEnabled={false}
                   refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.tabBarActive]} progressBackgroundColor={theme.colors.card} tintColor={theme.colors.tabBarActive} />
                   }
                 />
               </View>
