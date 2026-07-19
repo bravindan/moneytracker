@@ -20,6 +20,7 @@ import {
   authenticateWithBiometrics,
   saveCredentials,
   getSavedCredentials,
+  getBiometricSetting,
 } from "../services/biometricService";
 
 // Firebase Email/Password auth uses a synthetic email built from the phone number.
@@ -208,10 +209,8 @@ export default function LoginScreen({ navigation }) {
       const available = await isBiometricAvailable();
       setBiometricAvailable(available);
       // Check if user has enabled biometric login
-      if (available) {
-        const saved = await getSavedCredentials();
-        setBiometricLoginEnabled(!!saved);
-      }
+      const enabled = await getBiometricSetting();
+      setBiometricLoginEnabled(enabled);
     };
     checkBiometrics();
   }, []);

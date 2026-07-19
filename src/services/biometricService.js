@@ -2,6 +2,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 
 const CREDENTIALS_KEY = "moneytracker_credentials";
+const BIOMETRIC_SETTING_KEY = "moneytracker_biometric_login";
 
 /**
  * Check if biometric hardware is available and enrolled.
@@ -47,4 +48,19 @@ export const getSavedCredentials = async () => {
  */
 export const clearCredentials = async () => {
   await SecureStore.deleteItemAsync(CREDENTIALS_KEY);
+};
+
+/**
+ * Get biometric login setting.
+ */
+export const getBiometricSetting = async () => {
+  const value = await SecureStore.getItemAsync(BIOMETRIC_SETTING_KEY);
+  return value === "true";
+};
+
+/**
+ * Set biometric login setting.
+ */
+export const setBiometricSetting = async (enabled) => {
+  await SecureStore.setItemAsync(BIOMETRIC_SETTING_KEY, enabled ? "true" : "false");
 };
