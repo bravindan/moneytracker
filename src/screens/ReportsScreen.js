@@ -200,10 +200,23 @@ const ReportsScreen = ({ navigation, route }) => {
   }, [fetchPeriodData, reportMode]);
 
   const handlePrint = async () => {
-    if (!reportData?.summary) return;
+    if (!reportData?.summary && !periodData) return;
     setPrinting(true);
     try {
-      const { summary, spendings, investments } = reportData;
+      const printData = reportMode !== "monthly" && periodData
+        ? {
+            summary: {
+              income: periodData.totalIncome,
+              expensesAmount: periodData.totalExpensesAllocated,
+              investmentAmount: periodData.totalInvested,
+              balance: 0,
+              allocations: [],
+            },
+            spendings: periodData.allSpendings,
+            investments: periodData.allInvestments,
+          }
+        : reportData;
+      const { summary, spendings, investments } = printData;
       const totalAllocated = summary.expensesAmount || 0;
 
       // Get custom allocation names to exclude
@@ -384,7 +397,7 @@ const ReportsScreen = ({ navigation, route }) => {
     );
   }
 
-  if (!reportData?.summary) {
+  if (!reportData?.summary && !periodData) {
     return (
       <View
         style={[
@@ -433,7 +446,22 @@ const ReportsScreen = ({ navigation, route }) => {
     );
   }
 
-  const { summary, spendings, investments } = reportData;
+  // Use periodData when in period mode, otherwise use reportData
+  const activeData = reportMode !== "monthly" && periodData
+    ? {
+        summary: {
+          income: periodData.totalIncome,
+          expensesAmount: periodData.totalExpensesAllocated,
+          investmentAmount: periodData.totalInvested,
+          balance: 0,
+          allocations: [],
+        },
+        spendings: periodData.allSpendings,
+        investments: periodData.allInvestments,
+      }
+    : reportData;
+
+  const { summary, spendings, investments } = activeData;
   const totalAllocated = summary.expensesAmount || 0;
 
   // Get custom allocation names to exclude from expenses
