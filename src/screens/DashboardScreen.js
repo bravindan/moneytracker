@@ -1474,81 +1474,155 @@ export default function DashboardScreen({ navigation }) {
           {/* ── Other Allocations (custom categories) ── */}
           {Array.isArray(monthlyData?.allocations) &&
             monthlyData.allocations.filter((a) => a.key === "custom").length >
-              0 && (
-              <View
-                style={[styles.cardWhite, { backgroundColor: theme.colors.card }]}
-              >
-                <View style={styles.cardHeader}>
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <Ionicons
-                      name="pricetags-outline"
-                      size={20}
-                      color={theme.colors.text}
-                      style={{ marginRight: 8 }}
-                    />
-                    <Text
-                      style={[styles.sectionTitle, { color: theme.colors.text }]}
-                    >
-                      Other Allocations
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.cardToggle,
-                      { borderColor: theme.colors.border },
-                    ]}
-                    onPress={() =>
-                      setShowOtherAllocations(!showOtherAllocations)
-                    }
+              0 &&
+            monthlyData.allocations
+              .filter((a) => a.key === "custom")
+              .map((alloc, idx) => {
+                const allocSpent = allSpending
+                  .filter((s) => s.category === alloc.name)
+                  .reduce((sum, s) => sum + (s.totalSpending || s.amount || 0), 0);
+                const allocRemaining = (alloc.amount || 0) - allocSpent;
+                const allocPct = financialData.income > 0
+                  ? Math.round(((alloc.amount || 0) / financialData.income) * 100)
+                  : 0;
+                const spentPct = (alloc.amount || 0) > 0
+                  ? Math.round((allocSpent / (alloc.amount || 1)) * 100)
+                  : 0;
+                const remainPct = (alloc.amount || 0) > 0
+                  ? Math.round((Math.abs(allocRemaining) / (alloc.amount || 1)) * 100)
+                  : 0;
+                return (
+                  <View
+                    key={`custom-${idx}`}
+                    style={[styles.cardWhite, { backgroundColor: theme.colors.card }]}
                   >
-                    <Ionicons
-                      name={
-                        showOtherAllocations
-                          ? "eye-off-outline"
-                          : "eye-outline"
-                      }
-                      size={16}
-                      color={theme.colors.tabBarActive}
-                    />
-                  </TouchableOpacity>
-                </View>
-                {monthlyData.allocations
-                  .filter((a) => a.key === "custom")
-                  .map((a, idx) => (
-                    <View key={idx} style={styles.summaryRow}>
-                      <Text
-                        style={[
-                          styles.summaryLabel,
-                          { color: theme.colors.textSecondary },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {a.name}
-                      </Text>
-                      <View style={styles.amountWithPercentage}>
+                    <View style={styles.cardHeader}>
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        <Ionicons
+                          name="pricetags-outline"
+                          size={20}
+                          color={theme.colors.text}
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text
+                          style={[styles.sectionTitle, { color: theme.colors.text }]}
+                        >
+                          {alloc.name || "Custom Allocation"}
+                        </Text>
+                      </View>
+                      <View style={styles.cardActions}>
+                        <TouchableOpacity
+                          style={[
+                            styles.cardToggle,
+                            { borderColor: theme.colors.border },
+                          ]}
+                          onPress={() =>
+                            setShowOtherAllocations(!showOtherAllocations)
+                          }
+                        >
+                          <Ionicons
+                            name={showOtherAllocations ? "eye-off-outline" : "eye-outline"}
+                            size={16}
+                            color={theme.colors.tabBarActive}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.actionButton,
+                            { borderColor: theme.colors.border },
+                          ]}
+                          onPress={() =>
+                            navigation.navigate("SpendingDetails", {
+                              selectedMonth,
+                              category: alloc.name,
+                            })
+                          }
+                        >
+                          <Ionicons
+                            name="add-outline"
+                            size={16}
+                            color={theme.colors.tabBarActive}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.actionButton,
+                            { borderColor: theme.colors.border },
+                          ]}
+                          onPress={() =>
+                            navigation.navigate("SpendingDetails", {
+                              selectedMonth,
+                              category: alloc.name,
+                            })
+                          }
+                        >
+                          <Ionicons
+                            name="chevron-forward-outline"
+                            size={16}
+                            color={theme.colors.tabBarActive}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <View style={styles.expenseSummary}>
+                      <View style={styles.summaryRow}>
+                        <Text
+                          style={[styles.summaryLabel, { color: theme.colors.textSecondary, flex: 1 }]}
+                        >
+                          Allocated
+                          {showOtherAllocations && (
+                            <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                              {" "}({allocPct}% of income)
+                            </Text>
+                          )}:
+                        </Text>
+                        <Text
+                          style={[styles.summaryValue, { color: theme.colors.text }]}
+                        >
+                          {showOtherAllocations ? fmt(alloc.amount || 0) : "•••••"}
+                        </Text>
+                      </View>
+                      <View style={styles.summaryRow}>
+                        <Text
+                          style={[styles.summaryLabel, { color: theme.colors.textSecondary, flex: 1 }]}
+                        >
+                          Spent
+                          {showOtherAllocations && (
+                            <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                              {" "}({spentPct}% of alloc)
+                            </Text>
+                          )}:
+                        </Text>
+                        <Text
+                          style={[styles.summaryValue, { color: theme.colors.text }]}
+                        >
+                          {showOtherAllocations ? fmt(allocSpent) : "•••••"}
+                        </Text>
+                      </View>
+                      <View style={[styles.summaryRow, styles.balanceRow]}>
+                        <Text
+                          style={[styles.summaryLabel, { color: theme.colors.textSecondary, flex: 1 }]}
+                        >
+                          Remaining
+                          {showOtherAllocations && (
+                            <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>
+                              {" "}({remainPct}%)
+                            </Text>
+                          )}:
+                        </Text>
                         <Text
                           style={[
                             styles.summaryValue,
-                            { color: theme.colors.text },
+                            { color: allocRemaining >= 0 ? "#10b981" : "#ef4444" },
                           ]}
                         >
-                          {showOtherAllocations ? fmt(a.amount || 0) : "•••••"}
+                          {showOtherAllocations ? fmt(allocRemaining) : "•••••"}
                         </Text>
-                        {showOtherAllocations && (
-                          <Text
-                            style={[
-                              styles.summaryPercentage,
-                              { color: theme.colors.textSecondary },
-                            ]}
-                          >
-                            ({Math.round(a.percent || 0)}% of income)
-                          </Text>
-                        )}
                       </View>
                     </View>
-                  ))}
-              </View>
-            )}
+                  </View>
+                );
+              })}
 
           {/* ── Balance Card ── */}
           <View
