@@ -201,11 +201,17 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricLoginEnabled, setBiometricLoginEnabled] = useState(false);
 
   useEffect(() => {
     const checkBiometrics = async () => {
       const available = await isBiometricAvailable();
       setBiometricAvailable(available);
+      // Check if user has enabled biometric login
+      if (available) {
+        const saved = await getSavedCredentials();
+        setBiometricLoginEnabled(!!saved);
+      }
     };
     checkBiometrics();
   }, []);
@@ -247,8 +253,10 @@ export default function LoginScreen({ navigation }) {
       setLoading(true);
       try {
         await loginUser(loginEmail.trim(), password);
+        // Save credentials if biometric is enabled (for fingerprint login)
         if (biometricAvailable) {
           await saveCredentials(loginEmail.trim(), password);
+          setBiometricLoginEnabled(true);
         }
       } catch {
         setError("Invalid credentials.");
@@ -608,7 +616,7 @@ export default function LoginScreen({ navigation }) {
           </TouchableOpacity>
 
           {/* ── Biometric Login ── */}
-          {mode === "login" && biometricAvailable && (
+          {mode === "login" && biometricAvailable && biometricLoginEnabled && (
             <TouchableOpacity
               onPress={handleBiometricLogin}
               disabled={loading}
