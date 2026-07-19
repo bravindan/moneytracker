@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
+import IOSSpinner from "../components/IOSSpinner";
 import { getCurrentUser } from "../services/authService";
 import {
   getSpendingByCategory,
@@ -59,6 +60,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [item, setItem] = useState("");
   const [amount, setAmount] = useState("");
@@ -68,8 +70,20 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerMonthDate, setPickerMonthDate] = useState(new Date());
 
-  // Date picker helpers (mirrors the picker on the expenses detail screen)
+  // Calculate the first day of the selected month for date validation
+  const getFirstDayOfMonth = () => {
+    if (!selectedMonth) return new Date(0);
+    const [year, month] = selectedMonth.split("-").map(Number);
+    return new Date(year, month - 1, 1);
+  };
+
+  // Date picker helpers
   const handleDateSelect = (selected) => {
+    const firstDay = getFirstDayOfMonth();
+    if (selected < firstDay) {
+      Alert.alert("Invalid Date", "Cannot select a date before the start of the record month.");
+      return;
+    }
     setDate(selected);
     setShowDatePicker(false);
   };
@@ -104,9 +118,11 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
       const dayDate = new Date(year, month, i);
       const isSelected = dayDate.toDateString() === date.toDateString();
       const isToday = dayDate.toDateString() === new Date().toDateString();
+      const isBeforeMonth = dayDate < getFirstDayOfMonth();
       days.push(
         <TouchableOpacity
           key={i}
+          disabled={isBeforeMonth}
           style={[
             {
               width: "14.28%",
@@ -115,6 +131,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
               alignItems: "center",
               marginBottom: 4,
               borderRadius: 18,
+              opacity: isBeforeMonth ? 0.3 : 1,
             },
             isSelected && { backgroundColor: theme.colors.tabBarActive },
           ]}
@@ -170,6 +187,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
       return;
     }
 
+    setSaving(true);
     try {
       const spendingData = {
         category: category,
@@ -213,6 +231,8 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
     } catch (error) {
       console.error("Error saving spending:", error);
       Alert.alert("Error", "Failed to save spending");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -419,11 +439,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <Text
-            style={[styles.loadingText, { color: theme.colors.textSecondary }]}
-          >
-            Loading spending details...
-          </Text>
+          <IOSSpinner size={40} color={theme.colors.tabBarActive} />
         </View>
       ) : spendingList.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -462,7 +478,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContainer}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tabBarActive} />
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.tabBarActive]} progressBackgroundColor={theme.colors.card} tintColor={theme.colors.tabBarActive} />
             }
           />
         </>
@@ -748,10 +764,15 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
                   marginLeft: 8,
                 }}
                 onPress={handleSaveSpending}
+                disabled={saving}
               >
-                <Text style={{ color: "#fff", fontWeight: "bold" }}>
-                  {editingId ? "Update" : "Save"}
-                </Text>
+                {saving ? (
+                  <IOSSpinner size={18} color="#fff" />
+                ) : (
+                  <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                    {editingId ? "Update" : "Save"}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

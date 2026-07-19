@@ -7,11 +7,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ActivityIndicator,
   StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import IOSSpinner from "../components/IOSSpinner";
 import { loginUser, registerUser } from "../services/authService";
 import { createUserProfile, isEmailTaken } from "../services/firestoreService";
 import { useTheme } from "../contexts/ThemeContext";
@@ -20,6 +20,7 @@ import {
   authenticateWithBiometrics,
   saveCredentials,
   getSavedCredentials,
+  getBiometricSetting,
 } from "../services/biometricService";
 
 // Firebase Email/Password auth uses a synthetic email built from the phone number.
@@ -201,11 +202,15 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricLoginEnabled, setBiometricLoginEnabled] = useState(false);
 
   useEffect(() => {
     const checkBiometrics = async () => {
       const available = await isBiometricAvailable();
       setBiometricAvailable(available);
+      // Check if user has enabled biometric login
+      const enabled = await getBiometricSetting();
+      setBiometricLoginEnabled(enabled);
     };
     checkBiometrics();
   }, []);
@@ -247,8 +252,10 @@ export default function LoginScreen({ navigation }) {
       setLoading(true);
       try {
         await loginUser(loginEmail.trim(), password);
+        // Save credentials if biometric is enabled (for fingerprint login)
         if (biometricAvailable) {
           await saveCredentials(loginEmail.trim(), password);
+          setBiometricLoginEnabled(true);
         }
       } catch {
         setError("Invalid credentials.");
@@ -599,7 +606,7 @@ export default function LoginScreen({ navigation }) {
             ]}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <IOSSpinner size={18} color="#fff" />
             ) : (
               <Text style={styles.submitText}>
                 {mode === "login" ? "Sign In" : "Create Account"}
@@ -608,7 +615,7 @@ export default function LoginScreen({ navigation }) {
           </TouchableOpacity>
 
           {/* ── Biometric Login ── */}
-          {mode === "login" && biometricAvailable && (
+          {mode === "login" && biometricAvailable && biometricLoginEnabled && (
             <TouchableOpacity
               onPress={handleBiometricLogin}
               disabled={loading}

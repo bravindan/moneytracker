@@ -7,6 +7,9 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyCKPvDPfPfiKUZKdsFYkFheZHAAATBfIsE",
         "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "moneytracker-85d75.firebaseapp.com",

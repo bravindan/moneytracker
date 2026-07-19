@@ -8,11 +8,11 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
-  ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
   Modal,
 } from 'react-native';
+import IOSSpinner from '../components/IOSSpinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -187,8 +187,7 @@ const ProfileScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color={theme.colors.tabBarActive} />
-        <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>Loading profile...</Text>
+        <IOSSpinner size={40} color={theme.colors.tabBarActive} />
       </View>
     );
   }
@@ -365,7 +364,7 @@ const ProfileScreen = ({ navigation }) => {
                 disabled={saving}
               >
                 {saving ? (
-                  <ActivityIndicator color="#fff" />
+                  <IOSSpinner size={18} color="#fff" />
                 ) : (
                   <Text style={styles.changePasswordButtonText}>Change Password</Text>
                 )}
@@ -380,7 +379,7 @@ const ProfileScreen = ({ navigation }) => {
           disabled={saving}
         >
           {saving ? (
-            <ActivityIndicator color="#fff" />
+            <IOSSpinner size={18} color="#fff" />
           ) : (
             <Text style={styles.saveButtonText}>Save Profile Changes</Text>
           )}
@@ -469,7 +468,7 @@ const ProfileScreen = ({ navigation }) => {
                     disabled={deleting}
                   >
                     {deleting ? (
-                      <ActivityIndicator color="#fff" size="small" />
+                      <IOSSpinner size={18} color="#fff" />
                     ) : (
                       <Text style={[styles.modalButtonText, { color: '#ffffff' }]}>Delete Forever</Text>
                     )}
