@@ -281,9 +281,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
           { backgroundColor: theme.colors.background, paddingTop: insets.top },
         ]}
       >
-        <Text style={{ color: theme.colors.textSecondary }}>
-          Loading investments...
-        </Text>
+        <IOSSpinner size={40} color={theme.colors.tabBarActive} />
       </View>
     );
   }

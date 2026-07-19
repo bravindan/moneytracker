@@ -428,11 +428,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <Text
-            style={[styles.loadingText, { color: theme.colors.textSecondary }]}
-          >
-            Loading expenses...
-          </Text>
+          <IOSSpinner size={40} color={theme.colors.tabBarActive} />
         </View>
       ) : (
         <ScrollView

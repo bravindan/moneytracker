@@ -188,7 +188,6 @@ const ProfileScreen = ({ navigation }) => {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
         <IOSSpinner size={40} color={theme.colors.tabBarActive} />
-        <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>Loading profile...</Text>
       </View>
     );
   }

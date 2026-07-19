@@ -424,11 +424,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <Text
-            style={[styles.loadingText, { color: theme.colors.textSecondary }]}
-          >
-            Loading spending details...
-          </Text>
+          <IOSSpinner size={40} color={theme.colors.tabBarActive} />
         </View>
       ) : spendingList.length === 0 ? (
         <View style={styles.emptyContainer}>

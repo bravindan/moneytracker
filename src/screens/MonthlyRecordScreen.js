@@ -309,9 +309,6 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
         ]}
       >
         <IOSSpinner size={40} color={theme.colors.tabBarActive} />
-        <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>
-          Loading record...
-        </Text>
       </View>
     );
   }
