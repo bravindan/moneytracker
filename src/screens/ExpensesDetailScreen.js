@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
+import IOSSpinner from "../components/IOSSpinner";
 import { getCurrentUser } from "../services/authService";
 import {
   getExpenses,
@@ -60,6 +61,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
     route?.params?.selectedMonth || getCurrentMonth(),
   ); // YYYY-MM format
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [monthlyData, setMonthlyData] = useState(null);
   const [allSpending, setAllSpending] = useState([]);
 
@@ -333,6 +335,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
       return;
     }
 
+    setSaving(true);
     try {
       const amount = parseFloat(spendingAmount);
       const transactionCost = parseFloat(transactionCosts) || 0;
@@ -372,6 +375,8 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
     } catch (error) {
       console.error("Error saving spending:", error);
       Alert.alert("Error", "Failed to save spending");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -854,11 +859,16 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
               <TouchableOpacity
                 style={[
                   styles.saveModalButton,
-                  { backgroundColor: theme.colors.tabBarActive },
+                  { backgroundColor: saving ? theme.colors.textSecondary : theme.colors.tabBarActive },
                 ]}
                 onPress={handleSaveSpending}
+                disabled={saving}
               >
-                <Text style={styles.saveModalButtonText}>Save Spending</Text>
+                {saving ? (
+                  <IOSSpinner size={18} color="#fff" />
+                ) : (
+                  <Text style={styles.saveModalButtonText}>Save Spending</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

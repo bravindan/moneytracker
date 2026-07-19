@@ -454,6 +454,7 @@ export default function DashboardScreen({ navigation }) {
   const [unallocatedTxnCost, setUnallocatedTxnCost] = useState("");
   const [unallocatedDesc, setUnallocatedDesc] = useState("");
   const [unallocatedDate, setUnallocatedDate] = useState(new Date());
+  const [savingUnallocated, setSavingUnallocated] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     if (!uid) return;
@@ -684,6 +685,7 @@ export default function DashboardScreen({ navigation }) {
       Alert.alert("Insufficient", "Amount exceeds available balance.");
       return;
     }
+    setSavingUnallocated(true);
     try {
       await addSpending(uid, {
         itemName: unallocatedItem.trim(),
@@ -705,6 +707,8 @@ export default function DashboardScreen({ navigation }) {
     } catch (error) {
       console.error("Failed to save spending:", error);
       Alert.alert("Error", "Failed to save spending.");
+    } finally {
+      setSavingUnallocated(false);
     }
   };
 
@@ -2104,10 +2108,15 @@ export default function DashboardScreen({ navigation }) {
                   <Text style={{ color: theme.colors.text, fontWeight: "600" }}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: theme.colors.tabBarActive, alignItems: "center" }}
+                  style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: savingUnallocated ? theme.colors.textSecondary : theme.colors.tabBarActive, alignItems: "center" }}
                   onPress={handleSaveUnallocatedSpending}
+                  disabled={savingUnallocated}
                 >
-                  <Text style={{ color: "#fff", fontWeight: "600" }}>Save</Text>
+                  {savingUnallocated ? (
+                    <IOSSpinner size={18} color="#fff" />
+                  ) : (
+                    <Text style={{ color: "#fff", fontWeight: "600" }}>Save</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>

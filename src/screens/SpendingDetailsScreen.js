@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
+import IOSSpinner from "../components/IOSSpinner";
 import { getCurrentUser } from "../services/authService";
 import {
   getSpendingByCategory,
@@ -59,6 +60,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [item, setItem] = useState("");
   const [amount, setAmount] = useState("");
@@ -170,6 +172,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
       return;
     }
 
+    setSaving(true);
     try {
       const spendingData = {
         category: category,
@@ -213,6 +216,8 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
     } catch (error) {
       console.error("Error saving spending:", error);
       Alert.alert("Error", "Failed to save spending");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -748,10 +753,15 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
                   marginLeft: 8,
                 }}
                 onPress={handleSaveSpending}
+                disabled={saving}
               >
-                <Text style={{ color: "#fff", fontWeight: "bold" }}>
-                  {editingId ? "Update" : "Save"}
-                </Text>
+                {saving ? (
+                  <IOSSpinner size={18} color="#fff" />
+                ) : (
+                  <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                    {editingId ? "Update" : "Save"}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
