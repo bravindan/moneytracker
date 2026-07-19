@@ -51,6 +51,12 @@
         }
       ],
       "./plugins/withReleaseArchitectures"
-    ]
+    ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a8e5fcf7-55c6-4b5a-9e00-70f2e75aeb2b"
+    }
   }
 }
