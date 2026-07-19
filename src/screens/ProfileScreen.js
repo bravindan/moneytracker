@@ -110,14 +110,14 @@ const ProfileScreen = ({ navigation }) => {
     if (!uid) return;
     setUploading(true);
     try {
-      // Read image as base64 and convert to bytes for upload
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
       const filename = `profilePictures/${uid}.jpg`;
       const storageRef = ref(storage, filename);
-      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+
+      // Use new expo-file-system File API
+      const file = new File(uri);
+      const bytes = await file.bytes();
       await uploadBytes(storageRef, bytes);
+
       const downloadURL = await getDownloadURL(storageRef);
       await updateUserProfile(uid, { profileImage: downloadURL });
       setProfileImage(downloadURL);
