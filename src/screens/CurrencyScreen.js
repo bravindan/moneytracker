@@ -7,12 +7,12 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { getCurrentUser } from '../services/authService';
+import IOSSpinner from '../components/IOSSpinner';
 import { getUserProfile, updateUserProfile } from '../services/firestoreService';
 import CustomAlert from '../components/CustomAlert';
 
@@ -83,7 +83,7 @@ const CurrencyScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color={theme.colors.tabBarActive} />
+        <IOSSpinner size={40} color={theme.colors.tabBarActive} />
         <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>Loading...</Text>
       </View>
     );
@@ -153,7 +153,7 @@ const CurrencyScreen = ({ navigation }) => {
           disabled={saving}
         >
           {saving ? (
-            <ActivityIndicator color="#fff" />
+            <IOSSpinner size={18} color="#fff" />
           ) : (
             <Text style={styles.saveButtonText}>Save Currency</Text>
           )}

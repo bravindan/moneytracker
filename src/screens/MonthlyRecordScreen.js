@@ -7,12 +7,12 @@ import {
   ScrollView,
   Alert,
   StyleSheet,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import IOSSpinner from '../components/IOSSpinner';
 import { getCurrentUser } from '../services/authService';
 import {
   setMonthlySummary,
@@ -308,7 +308,7 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
           { backgroundColor: theme.colors.background, paddingTop: insets.top },
         ]}
       >
-        <ActivityIndicator size="large" color={theme.colors.tabBarActive} />
+        <IOSSpinner size={40} color={theme.colors.tabBarActive} />
         <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>
           Loading record...
         </Text>

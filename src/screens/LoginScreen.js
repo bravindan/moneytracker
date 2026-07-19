@@ -7,11 +7,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ActivityIndicator,
   StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import IOSSpinner from "../components/IOSSpinner";
 import { loginUser, registerUser } from "../services/authService";
 import { createUserProfile, isEmailTaken } from "../services/firestoreService";
 import { useTheme } from "../contexts/ThemeContext";
@@ -606,7 +606,7 @@ export default function LoginScreen({ navigation }) {
             ]}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <IOSSpinner size={18} color="#fff" />
             ) : (
               <Text style={styles.submitText}>
                 {mode === "login" ? "Sign In" : "Create Account"}
