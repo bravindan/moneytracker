@@ -20,9 +20,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.alkebu.moneytracker",
-      "softwareKeyboardLayoutMode": "pan",
-      "buildToolsVersion": "36.0.0",
-      "ndkVersion": "27.1.12297006"
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "favicon": "./assets/favicon.png"
