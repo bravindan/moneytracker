@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
+import IOSSpinner from "../components/IOSSpinner";
 import { getCurrentUser } from "../services/authService";
 import {
   getInvestments,
