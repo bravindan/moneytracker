@@ -121,9 +121,12 @@ const ProfileScreen = ({ navigation }) => {
       const sourceFile = new File(uri);
       sourceFile.copy(destFile, { overwrite: true });
 
+      // Construct the local path for Image component
+      const localPath = destFile.uri;
+
       // Save the local path to user profile
-      await updateUserProfile(uid, { profileImage: destFile.uri });
-      setProfileImage(destFile.uri);
+      await updateUserProfile(uid, { profileImage: localPath });
+      setProfileImage(localPath);
       Alert.alert('Success', 'Profile picture updated!');
     } catch (error) {
       console.error('Failed to save image:', error);

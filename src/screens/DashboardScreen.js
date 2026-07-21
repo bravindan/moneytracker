@@ -927,6 +927,7 @@ export default function DashboardScreen({ navigation }) {
                     <Image
                       source={{ uri: profile.profileImage }}
                       style={styles.profileImage}
+                      onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
                     />
                   ) : (
                     <Text
