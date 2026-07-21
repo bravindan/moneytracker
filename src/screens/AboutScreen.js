@@ -196,7 +196,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 8,
-    borderBottomWidth: 1,
   },
   headerTitle: { fontSize: 17, fontWeight: "600" },
   scrollContainer: { padding: 20, paddingBottom: 100 },
