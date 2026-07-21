@@ -19,7 +19,6 @@ import {
   getMonthlySummary,
   getUserProfile,
 } from "../services/firestoreService";
-import { Table, Row, Rows } from "react-native-table-component";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 
@@ -440,50 +439,62 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
         </Text>
         {investments.length > 0 ? (
           <View style={[styles.tableContainer, { borderColor: theme.colors.border }]}>
-            <Table borderStyle={{ borderWidth: 0 }}>
-              <Row
-                data={tableHead}
-                style={[
-                  styles.tableHead,
-                  { backgroundColor: theme.isDark ? "#2a2a2a" : "#f1f5f9" },
-                ]}
-                textStyle={[
-                  styles.headText,
-                  { color: theme.colors.textSecondary },
-                ]}
-              />
-              {tableData.map((row, idx) => (
-                <View
+            {/* Table Header */}
+            <View
+              style={[
+                styles.tableHead,
+                { backgroundColor: theme.isDark ? "#2a2a2a" : "#f1f5f9" },
+              ]}
+            >
+              {tableHead.map((header, idx) => (
+                <Text
                   key={idx}
                   style={[
-                    styles.tableRow,
+                    styles.headText,
                     {
-                      backgroundColor: theme.colors.card,
-                      borderBottomWidth: idx < tableData.length - 1 ? 1 : 0,
-                      borderBottomColor: theme.colors.border,
-                      flexDirection: "row",
+                      color: theme.colors.textSecondary,
+                      flex: 1,
+                      borderRightWidth: idx < tableHead.length - 1 ? 1 : 0,
+                      borderRightColor: theme.colors.border,
                     },
                   ]}
                 >
-                  {row.map((cell, cellIdx) => (
-                    <Text
-                      key={cellIdx}
-                      style={[
-                        styles.rowText,
-                        {
-                          color: theme.colors.text,
-                          flex: 1,
-                          borderRightWidth: cellIdx < row.length - 1 ? 1 : 0,
-                          borderRightColor: theme.colors.border,
-                        },
-                      ]}
-                    >
-                      {cell}
-                    </Text>
-                  ))}
-                </View>
+                  {header}
+                </Text>
               ))}
-            </Table>
+            </View>
+            {/* Table Rows */}
+            {tableData.map((row, idx) => (
+              <View
+                key={idx}
+                style={[
+                  styles.tableRow,
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderBottomWidth: idx < tableData.length - 1 ? 1 : 0,
+                    borderBottomColor: theme.colors.border,
+                    flexDirection: "row",
+                  },
+                ]}
+              >
+                {row.map((cell, cellIdx) => (
+                  <Text
+                    key={cellIdx}
+                    style={[
+                      styles.rowText,
+                      {
+                        color: theme.colors.text,
+                        flex: 1,
+                        borderRightWidth: cellIdx < row.length - 1 ? 1 : 0,
+                        borderRightColor: theme.colors.border,
+                      },
+                    ]}
+                  >
+                    {cell}
+                  </Text>
+                ))}
+              </View>
+            ))}
           </View>
         ) : (
           <View style={styles.emptyContainer}>
