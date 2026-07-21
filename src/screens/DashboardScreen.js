@@ -10,6 +10,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -412,6 +413,11 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 20,
     fontWeight: "bold",
+  },
+  profileImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
 });
 
@@ -917,14 +923,21 @@ export default function DashboardScreen({ navigation }) {
                     },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.avatarText,
-                      { color: generateAvatar(displayName, theme).color },
-                    ]}
-                  >
-                    {generateAvatar(displayName, theme).text}
-                  </Text>
+                  {profile?.profileImage ? (
+                    <Image
+                      source={{ uri: profile.profileImage }}
+                      style={styles.profileImage}
+                    />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.avatarText,
+                        { color: generateAvatar(displayName, theme).color },
+                      ]}
+                    >
+                      {generateAvatar(displayName, theme).text}
+                    </Text>
+                  )}
                 </View>
               </TouchableOpacity>
               <View style={styles.userText}>
