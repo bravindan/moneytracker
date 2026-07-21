@@ -486,9 +486,13 @@ const AddExpenseScreen = ({ navigation, route }) => {
                   onPress={handleAddExpense}
                   disabled={loading}
                 >
-                  <Text style={styles.addButtonText}>
-                    {loading ? "Saving..." : editingId ? "Update" : "Add"}
-                  </Text>
+                  {loading ? (
+                    <IOSSpinner size={18} color="#fff" />
+                  ) : (
+                    <Text style={styles.addButtonText}>
+                      {editingId ? "Update" : "Add"}
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>

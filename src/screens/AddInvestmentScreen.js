@@ -604,13 +604,13 @@ const AddInvestmentScreen = ({ navigation, route }) => {
               onPress={handleAddInvestment}
               disabled={loading}
             >
-              <Text style={styles.addButtonText}>
-                {loading
-                  ? "Saving..."
-                  : editingId
-                    ? "Update Investment"
-                    : "Add Investment"}
-              </Text>
+              {loading ? (
+                <IOSSpinner size={18} color="#fff" />
+              ) : (
+                <Text style={styles.addButtonText}>
+                  {editingId ? "Update Investment" : "Add Investment"}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
 

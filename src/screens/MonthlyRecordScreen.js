@@ -525,13 +525,13 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
           onPress={handleSave}
           disabled={loading}
         >
-          <Text style={styles.saveButtonText}>
-            {loading
-              ? 'Saving...'
-              : isEditing
-                ? 'Update Monthly Record'
-                : 'Save Monthly Record'}
-          </Text>
+          {loading ? (
+            <IOSSpinner size={18} color="#fff" />
+          ) : (
+            <Text style={styles.saveButtonText}>
+              {isEditing ? 'Update Monthly Record' : 'Save Monthly Record'}
+            </Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity

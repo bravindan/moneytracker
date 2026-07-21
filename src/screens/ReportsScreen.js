@@ -371,10 +371,15 @@ const ReportsScreen = ({ navigation, route }) => {
         </html>
       `;
 
-      const { uri } = await Print.printToFileAsync({ html });
+      const periodLabel = reportMode === "monthly"
+        ? selectedMonth
+        : reportMode === "quarterly"
+          ? `Q${selectedQuarter}-${selectedYear}`
+          : `${selectedYear}`;
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
       await Sharing.shareAsync(uri, {
         mimeType: "application/pdf",
-        dialogTitle: "Share Monthly Report",
+        dialogTitle: `Report-${periodLabel}`,
       });
     } catch (error) {
       console.error("Failed to generate report:", error);

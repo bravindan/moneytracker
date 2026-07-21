@@ -280,7 +280,8 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
         </html>
       `;
 
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      const filename = `Expenses-${selectedMonth.replace("-", "-")}.pdf`;
+      const { uri } = await Print.printToFileAsync({ html: htmlContent, base64: false });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri);
       } else {

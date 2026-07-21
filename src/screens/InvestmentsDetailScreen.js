@@ -220,6 +220,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
       `;
 
       // Generate PDF using expo-print
+      const filename = `Investments-${selectedMonth.replace("-", "-")}.pdf`;
       const { uri } = await Print.printToFileAsync({
         html: htmlContent,
         base64: false,
@@ -315,7 +316,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
           onPress={generatePDF}
         >
           <Ionicons
-            name="document-text-outline"
+            name="print-outline"
             size={20}
             color={theme.colors.tabBarActive}
           />
@@ -606,6 +607,8 @@ const styles = StyleSheet.create({
   },
   tableHead: {
     height: 40,
+    flexDirection: "row",
+    alignItems: "center",
   },
   tableRow: {
     height: 35,
