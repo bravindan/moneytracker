@@ -467,6 +467,8 @@ export default function DashboardScreen({ navigation }) {
     if (!uid) return;
     try {
       const data = await getUserProfile(uid);
+      console.log('Profile data:', data);
+      console.log('Profile image:', data?.profileImage);
       setProfile(data);
       if (data?.autoMonthSwitch !== undefined) setAutoMonthSwitch(data.autoMonthSwitch);
     } catch (error) {

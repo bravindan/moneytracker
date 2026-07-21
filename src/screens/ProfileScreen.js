@@ -125,7 +125,9 @@ const ProfileScreen = ({ navigation }) => {
       const localPath = destFile.uri;
 
       // Save the local path to user profile
+      console.log('Saving profile image:', localPath);
       await updateUserProfile(uid, { profileImage: localPath });
+      console.log('Profile updated successfully');
       setProfileImage(localPath);
       Alert.alert('Success', 'Profile picture updated!');
     } catch (error) {
