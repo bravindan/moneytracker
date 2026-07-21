@@ -73,7 +73,9 @@ const ProfileScreen = ({ navigation }) => {
           setUsername(data.username || data.displayName || '');
           setPhone(data.phone || '');
           setEmail(data.email || '');
-          setProfileImage(data.profileImage || null);
+          // Remove cache-busting parameter for display
+          const imgPath = data.profileImage ? data.profileImage.split('?')[0] : null;
+          setProfileImage(imgPath);
         }
       } catch (error) {
         console.error('Failed to fetch profile:', error);
@@ -124,11 +126,10 @@ const ProfileScreen = ({ navigation }) => {
       // Construct the local path for Image component
       const localPath = destFile.uri;
 
-      // Save the local path to user profile
-      console.log('Saving profile image:', localPath);
-      await updateUserProfile(uid, { profileImage: localPath });
-      console.log('Profile updated successfully');
-      setProfileImage(localPath);
+      // Save the local path to user profile with cache-busting
+      const cacheBustedPath = `${localPath}?t=${Date.now()}`;
+      await updateUserProfile(uid, { profileImage: cacheBustedPath });
+      setProfileImage(cacheBustedPath);
       Alert.alert('Success', 'Profile picture updated!');
     } catch (error) {
       console.error('Failed to save image:', error);

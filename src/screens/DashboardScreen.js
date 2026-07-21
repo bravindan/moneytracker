@@ -926,21 +926,17 @@ export default function DashboardScreen({ navigation }) {
                     },
                   ]}
                 >
-                  {profile?.profileImage ? (
+                  {profile && profile.profileImage ? (
                     <Image
                       source={{ uri: profile.profileImage }}
                       style={styles.profileImage}
-                      onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
                     />
                   ) : (
-                    <Text
-                      style={[
-                        styles.avatarText,
-                        { color: generateAvatar(displayName, theme).color },
-                      ]}
-                    >
-                      {generateAvatar(displayName, theme).text}
-                    </Text>
+                    <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: theme.colors.tabBarActive, justifyContent: "center", alignItems: "center" }}>
+                      <Text style={{ color: "#fff", fontSize: 20, fontWeight: "bold" }}>
+                        {displayName ? displayName.charAt(0).toUpperCase() : "?"}
+                      </Text>
+                    </View>
                   )}
                 </View>
               </TouchableOpacity>
