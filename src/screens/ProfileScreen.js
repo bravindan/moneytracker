@@ -11,6 +11,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   Modal,
+  Image,
 } from 'react-native';
 import IOSSpinner from '../components/IOSSpinner';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +19,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { getCurrentUser, changePassword, updateUserEmail, deleteCurrentUser } from '../services/authService';
 import { getUserProfile, updateUserProfile, deleteAllUserData } from '../services/firestoreService';
+import { storage } from '../config/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import * as ImagePicker from 'expo-image-picker';
+import uuid from 'uuid';
 
 const ProfileScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -25,6 +30,8 @@ const ProfileScreen = ({ navigation }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [profileImage, setProfileImage] = useState(null);
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -68,6 +75,7 @@ const ProfileScreen = ({ navigation }) => {
           setUsername(data.username || data.displayName || '');
           setPhone(data.phone || '');
           setEmail(data.email || '');
+          setProfileImage(data.profileImage || null);
         }
       } catch (error) {
         console.error('Failed to fetch profile:', error);
@@ -78,6 +86,60 @@ const ProfileScreen = ({ navigation }) => {
     };
     fetchProfile();
   }, [uid]);
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant camera roll access to change your profile picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      uploadImage(result.assets[0].uri);
+    }
+  };
+
+  const uploadImage = async (uri) => {
+    if (!uid) return;
+    setUploading(true);
+    try {
+      // Use XMLHttpRequest to get blob (works with file:// URIs in React Native)
+      const blob = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = function () {
+          resolve(xhr.response);
+        };
+        xhr.onerror = function () {
+          reject(new TypeError('Network request failed'));
+        };
+        xhr.responseType = 'blob';
+        xhr.open('GET', uri, true);
+        xhr.send(null);
+      });
+
+      const filename = `profilePictures/${uid}.jpg`;
+      const storageRef = ref(storage, filename);
+      const result = await uploadBytes(storageRef, blob);
+      blob.close();
+
+      const downloadURL = await getDownloadURL(storageRef);
+      await updateUserProfile(uid, { profileImage: downloadURL });
+      setProfileImage(downloadURL);
+      Alert.alert('Success', 'Profile picture updated!');
+    } catch (error) {
+      console.error('Failed to upload image:', error);
+      Alert.alert('Error', 'Could not upload image. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!uid) return;
@@ -220,12 +282,23 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary, textAlign: 'center' }]}>Manage your account details</Text>
 
         <View style={styles.photoSection}>
-          <View style={[styles.avatarContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <Text style={[styles.avatarText, { color: generateAvatar(username).color }]}>
-              {generateAvatar(username).text}
-            </Text>
-          </View>
-          <Text style={[styles.photoText, { color: theme.colors.textSecondary }]}>Account Avatar</Text>
+          <TouchableOpacity onPress={pickImage} disabled={uploading}>
+            <View style={[styles.avatarContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+              {uploading ? (
+                <IOSSpinner size={32} color={theme.colors.tabBarActive} />
+              ) : profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+              ) : (
+                <Text style={[styles.avatarText, { color: generateAvatar(username).color }]}>
+                  {generateAvatar(username).text}
+                </Text>
+              )}
+              <View style={[styles.cameraOverlay, { backgroundColor: theme.colors.tabBarActive }]}>
+                <Ionicons name="camera-outline" size={16} color="#fff" />
+              </View>
+            </View>
+          </TouchableOpacity>
+          <Text style={[styles.photoText, { color: theme.colors.textSecondary }]}>Tap to change photo</Text>
         </View>
 
         <View style={styles.formGroup}>
@@ -566,10 +639,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
   },
   avatarText: {
     fontSize: 40,
     fontWeight: 'bold',
+  },
+  cameraOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   photoText: {
     fontSize: 12,
