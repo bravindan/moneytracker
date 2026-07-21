@@ -439,27 +439,50 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
           Investment Platforms
         </Text>
         {investments.length > 0 ? (
-          <View style={styles.tableContainer}>
-            <Table borderStyle={{ borderWidth: 1, borderColor: "#e5e7eb" }}>
+          <View style={[styles.tableContainer, { borderColor: theme.colors.border }]}>
+            <Table borderStyle={{ borderWidth: 0 }}>
               <Row
                 data={tableHead}
                 style={[
                   styles.tableHead,
-                  { backgroundColor: theme.colors.card },
+                  { backgroundColor: theme.isDark ? "#2a2a2a" : "#f1f5f9" },
                 ]}
                 textStyle={[
                   styles.headText,
                   { color: theme.colors.textSecondary },
                 ]}
               />
-              <Rows
-                data={tableData}
-                style={[
-                  styles.tableRow,
-                  { backgroundColor: theme.colors.card },
-                ]}
-                textStyle={[styles.rowText, { color: theme.colors.text }]}
-              />
+              {tableData.map((row, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.tableRow,
+                    {
+                      backgroundColor: theme.colors.card,
+                      borderBottomWidth: idx < tableData.length - 1 ? 1 : 0,
+                      borderBottomColor: theme.colors.border,
+                      flexDirection: "row",
+                    },
+                  ]}
+                >
+                  {row.map((cell, cellIdx) => (
+                    <Text
+                      key={cellIdx}
+                      style={[
+                        styles.rowText,
+                        {
+                          color: theme.colors.text,
+                          flex: 1,
+                          borderRightWidth: cellIdx < row.length - 1 ? 1 : 0,
+                          borderRightColor: theme.colors.border,
+                        },
+                      ]}
+                    >
+                      {cell}
+                    </Text>
+                  ))}
+                </View>
+              ))}
             </Table>
           </View>
         ) : (
@@ -567,11 +590,11 @@ const styles = StyleSheet.create({
   tableContainer: {
     marginTop: 8,
     borderRadius: 12,
+    borderWidth: 1,
     overflow: "hidden",
   },
   tableHead: {
     height: 40,
-    backgroundColor: "#f1f5f9",
   },
   tableRow: {
     height: 35,
