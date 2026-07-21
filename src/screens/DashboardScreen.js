@@ -92,6 +92,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
+    overflow: "hidden",
   },
   userText: {
     flex: 1,
@@ -415,9 +416,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   profileImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
 });
 
