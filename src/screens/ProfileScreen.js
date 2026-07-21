@@ -19,10 +19,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { getCurrentUser, changePassword, updateUserEmail, deleteCurrentUser } from '../services/authService';
 import { getUserProfile, updateUserProfile, deleteAllUserData } from '../services/firestoreService';
-import { storage } from '../config/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
-import uuid from 'uuid';
+import * as FileSystem from 'expo-file-system';
 
 const ProfileScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -110,32 +108,26 @@ const ProfileScreen = ({ navigation }) => {
     if (!uid) return;
     setUploading(true);
     try {
-      // Use XMLHttpRequest to get blob (works with file:// URIs in React Native)
-      const blob = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.onload = function () {
-          resolve(xhr.response);
-        };
-        xhr.onerror = function () {
-          reject(new TypeError('Network request failed'));
-        };
-        xhr.responseType = 'blob';
-        xhr.open('GET', uri, true);
-        xhr.send(null);
-      });
+      // Save image locally to app's document directory
+      const dir = `${FileSystem.documentDirectory}profilePictures/`;
+      const dirInfo = await FileSystem.getInfoAsync(dir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+      }
 
-      const filename = `profilePictures/${uid}.jpg`;
-      const storageRef = ref(storage, filename);
-      const result = await uploadBytes(storageRef, blob);
-      blob.close();
+      const filename = `${uid}.jpg`;
+      const localUri = `${dir}${filename}`;
 
-      const downloadURL = await getDownloadURL(storageRef);
-      await updateUserProfile(uid, { profileImage: downloadURL });
-      setProfileImage(downloadURL);
+      // Copy the picked image to our app's directory
+      await FileSystem.copyAsync({ from: uri, to: localUri });
+
+      // Save the local path to user profile
+      await updateUserProfile(uid, { profileImage: localUri });
+      setProfileImage(localUri);
       Alert.alert('Success', 'Profile picture updated!');
     } catch (error) {
-      console.error('Failed to upload image:', error);
-      Alert.alert('Error', 'Could not upload image. Please try again.');
+      console.error('Failed to save image:', error);
+      Alert.alert('Error', 'Could not save image. Please try again.');
     } finally {
       setUploading(false);
     }
