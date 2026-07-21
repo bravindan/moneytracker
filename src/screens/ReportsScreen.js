@@ -24,6 +24,7 @@ import {
 } from "../services/firestoreService";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import { File } from "expo-file-system";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 
@@ -376,8 +377,16 @@ const ReportsScreen = ({ navigation, route }) => {
         : reportMode === "quarterly"
           ? `Q${selectedQuarter}-${selectedYear}`
           : `${selectedYear}`;
-      const { uri } = await Print.printToFileAsync({ html, base64: false });
-      await Sharing.shareAsync(uri, {
+      const { uri: tempUri } = await Print.printToFileAsync({ html, base64: false });
+
+      // Rename to meaningful filename
+      const finalName = `Report-${periodLabel}.pdf`;
+      const finalUri = tempUri.replace(/[^/]+\.pdf$/, finalName);
+      const tempFile = new File(tempUri);
+      const destFile = new File(finalUri);
+      tempFile.move(destFile, { overwrite: true });
+
+      await Sharing.shareAsync(destFile.uri, {
         mimeType: "application/pdf",
         dialogTitle: `Report-${periodLabel}`,
       });

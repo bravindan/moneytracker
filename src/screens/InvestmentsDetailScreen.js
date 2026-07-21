@@ -21,6 +21,7 @@ import {
 } from "../services/firestoreService";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import { File } from "expo-file-system";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 
@@ -220,21 +221,29 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
       `;
 
       // Generate PDF using expo-print
-      const filename = `Investments-${selectedMonth.replace("-", "-")}.pdf`;
-      const { uri } = await Print.printToFileAsync({
+      const { uri: tempUri } = await Print.printToFileAsync({
         html: htmlContent,
         base64: false,
       });
 
+      // Rename to meaningful filename
+      const [year, month] = selectedMonth.split("-");
+      const finalName = `Investments-${month}-${year}.pdf`;
+      const finalUri = tempUri.replace(/[^/]+\.pdf$/, finalName);
+
+      // Move to final name
+      const tempFile = new File(tempUri);
+      const destFile = new File(finalUri);
+      tempFile.move(destFile, { overwrite: true });
+
       // Share the PDF
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
+        await Sharing.shareAsync(destFile.uri, {
           mimeType: "application/pdf",
-          dialogTitle: "Investment Summary PDF",
-          UTI: "com.adobe.pdf",
+          dialogTitle: "Investment Summary",
         });
       } else {
-        Alert.alert("Success", `PDF saved to: ${uri}`);
+        Alert.alert("Success", `PDF saved to: ${destFile.uri}`);
       }
     } catch (error) {
       console.error("Error generating PDF:", error);

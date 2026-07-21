@@ -28,6 +28,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import { File } from "expo-file-system";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 
@@ -280,12 +281,23 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
         </html>
       `;
 
-      const filename = `Expenses-${selectedMonth.replace("-", "-")}.pdf`;
-      const { uri } = await Print.printToFileAsync({ html: htmlContent, base64: false });
+      const { uri: tempUri } = await Print.printToFileAsync({ html: htmlContent, base64: false });
+
+      // Rename to meaningful filename
+      const [year, month] = selectedMonth.split("-");
+      const finalName = `Expenses-${month}-${year}.pdf`;
+      const finalUri = tempUri.replace(/[^/]+\.pdf$/, finalName);
+      const tempFile = new File(tempUri);
+      const destFile = new File(finalUri);
+      tempFile.move(destFile, { overwrite: true });
+
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri);
+        await Sharing.shareAsync(destFile.uri, {
+          mimeType: "application/pdf",
+          dialogTitle: "Expense Report",
+        });
       } else {
-        Alert.alert("PDF Generated", `File saved to: ${uri}`);
+        Alert.alert("PDF Generated", `File saved to: ${destFile.uri}`);
       }
     } catch (error) {
       console.error(error);
