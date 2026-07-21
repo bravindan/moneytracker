@@ -20,7 +20,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getCurrentUser, changePassword, updateUserEmail, deleteCurrentUser } from '../services/authService';
 import { getUserProfile, updateUserProfile, deleteAllUserData } from '../services/firestoreService';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import { File, Directory, Paths } from 'expo-file-system';
 
 const ProfileScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -108,22 +108,22 @@ const ProfileScreen = ({ navigation }) => {
     if (!uid) return;
     setUploading(true);
     try {
-      // Save image locally to app's document directory
-      const dir = `${FileSystem.documentDirectory}profilePictures/`;
-      const dirInfo = await FileSystem.getInfoAsync(dir);
-      if (!dirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+      // Create profilePictures directory if it doesn't exist
+      const dir = new Directory(Paths.document, 'profilePictures');
+      if (!dir.exists) {
+        dir.create({ intermediates: true });
       }
 
-      const filename = `${uid}.jpg`;
-      const localUri = `${dir}${filename}`;
+      // Create destination file
+      const destFile = new File(dir, `${uid}.jpg`);
 
       // Copy the picked image to our app's directory
-      await FileSystem.copyAsync({ from: uri, to: localUri });
+      const sourceFile = new File(uri);
+      sourceFile.copy(destFile, { overwrite: true });
 
       // Save the local path to user profile
-      await updateUserProfile(uid, { profileImage: localUri });
-      setProfileImage(localUri);
+      await updateUserProfile(uid, { profileImage: destFile.uri });
+      setProfileImage(destFile.uri);
       Alert.alert('Success', 'Profile picture updated!');
     } catch (error) {
       console.error('Failed to save image:', error);
