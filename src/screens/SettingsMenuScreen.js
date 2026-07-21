@@ -100,6 +100,12 @@ const SettingsMenuScreen = ({ navigation }) => {
       icon: 'color-palette-outline',
       screen: 'Theme',
     },
+    {
+      title: 'About',
+      subtitle: 'App info, updates, and more',
+      icon: 'information-circle-outline',
+      screen: 'About',
+    },
   ];
 
   return (

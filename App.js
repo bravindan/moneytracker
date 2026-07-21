@@ -29,6 +29,7 @@ import MonthlyRecordScreen from "./src/screens/MonthlyRecordScreen";
 import SettingsMenuScreen from "./src/screens/SettingsMenuScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
+import AboutScreen from "./src/screens/AboutScreen";
 import CurrencyScreen from "./src/screens/CurrencyScreen";
 import ThemeScreen from "./src/screens/ThemeScreen";
 import AddExpenseScreen from "./src/screens/AddExpenseScreen";
@@ -58,6 +59,7 @@ function AppStack() {
       <Stack.Screen name="MonthlyRecord" component={MonthlyRecordScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
+      <Stack.Screen name="About" component={AboutScreen} />
       <Stack.Screen name="Currency" component={CurrencyScreen} />
       <Stack.Screen name="Theme" component={ThemeScreen} />
       <Stack.Screen name="AddExpense" component={AddExpenseScreen} />
