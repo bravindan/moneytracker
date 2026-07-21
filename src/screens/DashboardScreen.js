@@ -467,8 +467,6 @@ export default function DashboardScreen({ navigation }) {
     if (!uid) return;
     try {
       const data = await getUserProfile(uid);
-      console.log('Profile data:', data);
-      console.log('Profile image:', data?.profileImage);
       setProfile(data);
       if (data?.autoMonthSwitch !== undefined) setAutoMonthSwitch(data.autoMonthSwitch);
     } catch (error) {
@@ -921,23 +919,13 @@ export default function DashboardScreen({ navigation }) {
                   style={[
                     styles.profilePhotoPlaceholder,
                     {
-                      backgroundColor: theme.colors.card,
-                      borderColor: theme.colors.border,
+                      backgroundColor: theme.colors.tabBarActive,
                     },
                   ]}
                 >
-                  {profile && profile.profileImage ? (
-                    <Image
-                      source={{ uri: profile.profileImage }}
-                      style={styles.profileImage}
-                    />
-                  ) : (
-                    <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: theme.colors.tabBarActive, justifyContent: "center", alignItems: "center" }}>
-                      <Text style={{ color: "#fff", fontSize: 20, fontWeight: "bold" }}>
-                        {displayName ? displayName.charAt(0).toUpperCase() : "?"}
-                      </Text>
-                    </View>
-                  )}
+                  <Text style={{ color: "#fff", fontSize: 20, fontWeight: "bold" }}>
+                    {displayName ? displayName.charAt(0).toUpperCase() : "?"}
+                  </Text>
                 </View>
               </TouchableOpacity>
               <View style={styles.userText}>
