@@ -23,6 +23,8 @@ import {
   getUserProfile,
   getSpending,
   getInvestments,
+  getCredits,
+  getCreditSummary,
   deleteMonthlySummary,
   addSpending,
   updateUserProfile,
@@ -449,6 +451,9 @@ export default function DashboardScreen({ navigation }) {
   const [showOtherAllocations, setShowOtherAllocations] = useState(false);
   const [allSpending, setAllSpending] = useState([]);
   const [investments, setInvestments] = useState([]);
+  const [credits, setCredits] = useState([]);
+  const [creditSummary, setCreditSummary] = useState({ total: 0, used: 0, remaining: 0 });
+  const [showCreditAmount, setShowCreditAmount] = useState(false);
   const [showRecordMenu, setShowRecordMenu] = useState(false);
 
   // Auto month switch
@@ -479,10 +484,12 @@ export default function DashboardScreen({ navigation }) {
   const fetchMonthlyData = useCallback(async () => {
     if (!uid) return;
     try {
-      const [data, spendingData, invData] = await Promise.all([
+      const [data, spendingData, invData, creditData, creditSum] = await Promise.all([
         getMonthlySummary(uid, selectedMonth),
         getSpending(uid, selectedMonth),
         getInvestments(uid, selectedMonth),
+        getCredits(uid),
+        getCreditSummary(uid),
       ]);
 
       if (data) {
@@ -493,11 +500,15 @@ export default function DashboardScreen({ navigation }) {
 
       setAllSpending(spendingData || []);
       setInvestments(invData || []);
+      setCredits(creditData || []);
+      setCreditSummary(creditSum || { total: 0, used: 0, remaining: 0 });
     } catch (error) {
       console.error("Failed to fetch monthly data:", error);
       setMonthlyData(null);
       setAllSpending([]);
       setInvestments([]);
+      setCredits([]);
+      setCreditSummary({ total: 0, used: 0, remaining: 0 });
     } finally {
       setLoading(false);
     }
@@ -1329,6 +1340,125 @@ export default function DashboardScreen({ navigation }) {
                   </>
                 );
               })()}
+            </View>
+          </View>
+
+          {/* ── Credit Card ── */}
+          <View
+            style={[styles.cardPurple, { backgroundColor: theme.colors.card }]}
+          >
+            <View style={styles.cardHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Ionicons
+                  name="card-outline"
+                  size={20}
+                  color="#f59e0b"
+                  style={{ marginRight: 8 }}
+                />
+                <Text
+                  style={[styles.sectionTitle, { color: theme.colors.text }]}
+                >
+                  Credit
+                </Text>
+              </View>
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.cardToggle,
+                    { borderColor: theme.colors.border },
+                  ]}
+                  onPress={() => setShowCreditAmount(!showCreditAmount)}
+                >
+                  <Ionicons
+                    name={showCreditAmount ? "eye-off-outline" : "eye-outline"}
+                    size={16}
+                    color={theme.colors.tabBarActive}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    { borderColor: theme.colors.border },
+                  ]}
+                  onPress={() =>
+                    navigation.navigate("AddCredit", { selectedMonth })
+                  }
+                >
+                  <Ionicons
+                    name="add-outline"
+                    size={16}
+                    color={theme.colors.tabBarActive}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    { borderColor: theme.colors.border },
+                  ]}
+                  onPress={() =>
+                    navigation.navigate("AddCredit", { selectedMonth })
+                  }
+                >
+                  <Ionicons
+                    name="chevron-forward-outline"
+                    size={16}
+                    color={theme.colors.tabBarActive}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.expenseSummary}>
+              <View style={styles.summaryRow}>
+                <Text
+                  style={[
+                    styles.summaryLabel,
+                    { color: theme.colors.textSecondary, flex: 1 },
+                  ]}
+                >
+                  Total Credit:
+                </Text>
+                <Text
+                  style={[styles.summaryValue, { color: theme.colors.text }]}
+                >
+                  {showCreditAmount ? fmt(creditSummary.total) : "•••••"}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text
+                  style={[
+                    styles.summaryLabel,
+                    { color: theme.colors.textSecondary, flex: 1 },
+                  ]}
+                >
+                  Used:
+                </Text>
+                <Text
+                  style={[styles.summaryValue, { color: "#f59e0b" }]}
+                >
+                  {showCreditAmount ? fmt(creditSummary.used) : "•••••"}
+                </Text>
+              </View>
+              <View style={[styles.summaryRow, styles.balanceRow]}>
+                <Text
+                  style={[
+                    styles.summaryLabel,
+                    { color: theme.colors.textSecondary, flex: 1 },
+                  ]}
+                >
+                  Remaining:
+                </Text>
+                <Text
+                  style={[
+                    styles.summaryValue,
+                    {
+                      color: creditSummary.remaining > 0 ? "#10b981" : theme.colors.textSecondary,
+                    },
+                  ]}
+                >
+                  {showCreditAmount ? fmt(creditSummary.remaining) : "•••••"}
+                </Text>
+              </View>
             </View>
           </View>
 
