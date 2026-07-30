@@ -8,7 +8,13 @@ const IS_DEV = process.env.APP_VARIANT === "development";
 module.exports = ({ config }) => ({
   ...config,
   name: IS_DEV ? "Money Tracker (Dev)" : config.name,
-  plugins: ["expo-secure-store", "expo-font"],
+  plugins: [
+    "expo-secure-store",
+    "expo-font",
+    "expo-build-properties",
+    "expo-sharing",
+    "expo-splash-screen",
+  ],
   ios: {
     ...config.ios,
     bundleIdentifier: IS_DEV
@@ -17,8 +23,6 @@ module.exports = ({ config }) => ({
   },
   android: {
     ...config.android,
-    package: IS_DEV
-      ? "com.alkebu.moneytracker.dev"
-      : config.android.package,
+    package: IS_DEV ? "com.alkebu.moneytracker.dev" : config.android.package,
   },
 });

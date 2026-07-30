@@ -418,9 +418,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   profileImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
 });
 
@@ -618,6 +618,8 @@ export default function DashboardScreen({ navigation }) {
     user?.displayName ||
     user?.email?.split("@")[0] ||
     "User";
+
+  const profileImageUri = profile?.profileImage || null;
 
   const changeMonth = (direction) => {
     const [year, month] = selectedMonth.split("-").map(Number);
@@ -934,9 +936,16 @@ export default function DashboardScreen({ navigation }) {
                     },
                   ]}
                 >
-                  <Text style={{ color: "#fff", fontSize: 20, fontWeight: "bold" }}>
-                    {displayName ? displayName.charAt(0).toUpperCase() : "?"}
-                  </Text>
+                  {profileImageUri ? (
+                    <Image
+                      source={{ uri: profileImageUri }}
+                      style={styles.profileImage}
+                    />
+                  ) : (
+                    <Text style={{ color: "#fff", fontSize: 20, fontWeight: "bold" }}>
+                      {displayName ? displayName.charAt(0).toUpperCase() : "?"}
+                    </Text>
+                  )}
                 </View>
               </TouchableOpacity>
               <View style={styles.userText}>

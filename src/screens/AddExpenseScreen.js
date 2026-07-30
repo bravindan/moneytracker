@@ -28,6 +28,7 @@ import {
   addSpending,
 } from "../services/firestoreService";
 import CreditModal from "../components/CreditModal";
+import IOSSpinner from "../components/IOSSpinner";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 

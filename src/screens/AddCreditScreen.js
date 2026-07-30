@@ -60,8 +60,11 @@ const AddCreditScreen = ({ navigation, route }) => {
     }).format(num);
   };
 
-  // Source options
-  const sourceOptions = ["Borrowed", "Loan", "Manual", "Other"];
+  const isFormValid =
+    amount.trim() !== "" &&
+    !isNaN(parseFloat(amount)) &&
+    parseFloat(amount) > 0 &&
+    source.trim() !== "";
 
   useEffect(() => {
     if (uid) loadCredits();
@@ -99,20 +102,13 @@ const AddCreditScreen = ({ navigation, route }) => {
   };
 
   const handleAddCredit = async () => {
-    if (!amount || parseFloat(amount) <= 0) {
-      Alert.alert("Error", "Please enter a valid amount");
-      return;
-    }
-    if (!source) {
-      Alert.alert("Error", "Please select a source");
-      return;
-    }
+    if (!isFormValid) return;
 
     setLoading(true);
     try {
       const creditData = {
         amount: parseFloat(amount),
-        source,
+        source: source.trim(),
         description: description.trim(),
         month: selectedMonth,
       };
@@ -138,7 +134,7 @@ const AddCreditScreen = ({ navigation, route }) => {
   };
 
   const editCredit = (credit) => {
-    setAmount(credit.amount.toString());
+    setAmount(credit.amount ? credit.amount.toString() : "");
     setSource(credit.source || "");
     setDescription(credit.description || "");
     setEditingId(credit.id);
@@ -346,39 +342,20 @@ const AddCreditScreen = ({ navigation, route }) => {
           <Text style={[styles.label, { color: theme.colors.text }]}>
             Source *
           </Text>
-          <View style={styles.sourceOptions}>
-            {sourceOptions.map((opt) => (
-              <TouchableOpacity
-                key={opt}
-                style={[
-                  styles.sourceChip,
-                  {
-                    backgroundColor:
-                      source === opt
-                        ? theme.colors.tabBarActive + "20"
-                        : theme.colors.card,
-                    borderColor:
-                      source === opt ? theme.colors.tabBarActive : theme.colors.border,
-                  },
-                ]}
-                onPress={() => setSource(opt)}
-              >
-                <Text
-                  style={[
-                    styles.sourceChipText,
-                    {
-                      color:
-                        source === opt
-                          ? theme.colors.tabBarActive
-                          : theme.colors.text,
-                    },
-                  ]}
-                >
-                  {opt}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                color: theme.colors.text,
+              },
+            ]}
+            placeholder="e.g., Bank Loan, Friend, Credit Card"
+            placeholderTextColor={theme.colors.textSecondary}
+            value={source}
+            onChangeText={setSource}
+          />
         </View>
 
         {/* Description */}
@@ -406,10 +383,13 @@ const AddCreditScreen = ({ navigation, route }) => {
         <TouchableOpacity
           style={[
             styles.submitButton,
-            { backgroundColor: theme.colors.tabBarActive },
+            {
+              backgroundColor: theme.colors.tabBarActive,
+              opacity: isFormValid && !loading ? 1 : 0.5,
+            },
           ]}
           onPress={handleAddCredit}
-          disabled={loading}
+          disabled={!isFormValid || loading}
         >
           {loading ? (
             <IOSSpinner size={20} color="#fff" />
@@ -497,21 +477,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-  },
-  sourceOptions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  sourceChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  sourceChipText: {
-    fontSize: 13,
-    fontWeight: "500",
   },
   submitButton: {
     paddingVertical: 14,
