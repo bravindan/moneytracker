@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { getCurrentUser } from '../services/authService';
 import { getUserProfile, updateUserProfile } from '../services/firestoreService';
-import { isBiometricAvailable, getBiometricSetting, setBiometricSetting } from '../services/biometricService';
+import { isBiometricAvailable, getBiometricSetting, setBiometricSetting, clearCredentials } from '../services/biometricService';
 
 const SettingsMenuScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -56,11 +56,13 @@ const SettingsMenuScreen = ({ navigation }) => {
       await setBiometricSetting(true);
       Alert.alert(
         'Fingerprint Login Enabled',
-        'You can now use your fingerprint to sign in. Make sure you have saved your password at least once.'
+        'You can now use your fingerprint to sign in. Sign in with your password once to store it securely on this device.'
       );
     } else {
       setBiometricEnabled(false);
       await setBiometricSetting(false);
+      // Remove the stored password from this device
+      await clearCredentials();
     }
   };
 

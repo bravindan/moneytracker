@@ -180,26 +180,19 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
     setShowAddModal(true);
   };
 
-  // Handle save spending
-  const handleSaveSpending = async () => {
-    if (!amount || parseFloat(amount) <= 0) {
-      Alert.alert("Error", "Please enter a valid amount");
-      return;
-    }
+  const clearSpendingForm = () => {
+    setShowAddModal(false);
+    setItem("");
+    setAmount("");
+    setTransactionCosts("");
+    setDescription("");
+    setDate(new Date());
+    setEditingId(null);
+  };
 
+  const saveSpendingRecord = async (spendingData) => {
     setSaving(true);
     try {
-      const spendingData = {
-        category: category,
-        amount: parseFloat(amount),
-        description: description,
-        itemName: item,
-        date: date,
-        month: selectedMonth,
-        transactionCosts: parseFloat(transactionCosts) || 0,
-        totalSpending: parseFloat(amount) + parseFloat(transactionCosts || 0),
-      };
-
       if (editingId) {
         await updateSpending(user.uid, editingId, spendingData);
         setSpendingList((prev) =>
@@ -218,22 +211,42 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
           },
           ...prev,
         ]);
+
         Alert.alert("Success", "Spending added successfully!");
       }
 
-      setShowAddModal(false);
-      setItem("");
-      setAmount("");
-      setTransactionCosts("");
-      setDescription("");
-      setDate(new Date());
-      setEditingId(null);
+      clearSpendingForm();
     } catch (error) {
       console.error("Error saving spending:", error);
       Alert.alert("Error", "Failed to save spending");
     } finally {
       setSaving(false);
     }
+  };
+
+  // Handle save spending
+  const handleSaveSpending = async () => {
+    if (!amount || parseFloat(amount) <= 0) {
+      Alert.alert("Error", "Please enter a valid amount");
+      return;
+    }
+
+    const amountNum = parseFloat(amount);
+    const txnCostNum = parseFloat(transactionCosts) || 0;
+    const total = amountNum + txnCostNum;
+
+    const spendingData = {
+      category: category,
+      amount: amountNum,
+      description: description,
+      itemName: item,
+      date: date,
+      month: selectedMonth,
+      transactionCosts: txnCostNum,
+      totalSpending: total,
+    };
+
+    await saveSpendingRecord(spendingData);
   };
 
   const handleDeleteSpending = (id) => {

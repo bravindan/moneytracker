@@ -24,7 +24,6 @@ const budgetsCol = (uid) => collection(db, "users", uid, "budgets");
 const investmentsCol = (uid) => collection(db, "users", uid, "investments");
 const expensesCol = (uid) => collection(db, "users", uid, "expenses");
 const spendingCol = (uid) => collection(db, "users", uid, "spending");
-const creditsCol = (uid) => collection(db, "users", uid, "credits");
 
 const getMonthKeyFromValue = (value) => {
   if (!value) return null;
@@ -120,7 +119,6 @@ export const deleteAllUserData = async (uid) => {
     investmentsCol(uid),
     expensesCol(uid),
     spendingCol(uid),
-    creditsCol(uid),
   ];
 
   // Delete all documents in each subcollection
@@ -456,121 +454,3 @@ export const updateMonthlySummary = (uid, month, updates) =>
 export const deleteMonthlySummary = (uid, month) =>
   deleteDoc(doc(monthlySummariesCol(uid), month));
 
-// ---------------------------------------------------------------------------
-// Credits
-// ---------------------------------------------------------------------------
-
-/**
- * Add a new credit record.
- * @param {string} uid
- * @param {{ amount: number, source: string, description?: string }} data
- * @returns {Promise<import('firebase/firestore').DocumentReference>}
- */
-export const addCredit = (uid, data) =>
-  addDoc(creditsCol(uid), {
-    ...data,
-    used: 0,
-    remaining: data.amount,
-    month: resolveWriteMonth(data),
-    createdAt: serverTimestamp(),
-  });
-
-/**
- * Fetch all credits for a user.
- * @param {string} uid
- * @param {string} [month] - Optional month filter (YYYY-MM)
- * @returns {Promise<object[]>}
- */
-export const getCredits = async (uid, month) => {
-  if (month) {
-    const q = query(creditsCol(uid), where("month", "==", month), orderBy("createdAt", "desc"));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  }
-  const q = query(creditsCol(uid), orderBy("createdAt", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-};
-
-/**
- * Fetch credits that have remaining balance (all months).
- * @param {string} uid
- * @returns {Promise<object[]>}
- */
-export const getActiveCredits = async (uid) => {
-  const snap = await getDocs(creditsCol(uid));
-  return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .filter((c) => (c.remaining || 0) > 0);
-};
-
-/**
- * Update a credit record.
- * @param {string} uid
- * @param {string} creditId
- * @param {object} updates
- */
-export const updateCredit = (uid, creditId, updates) =>
-  updateDoc(doc(creditsCol(uid), creditId), updates);
-
-/**
- * Delete a credit record.
- * @param {string} uid
- * @param {string} creditId
- */
-export const deleteCredit = (uid, creditId) =>
-  deleteDoc(doc(creditsCol(uid), creditId));
-
-/**
- * Use credit for an expense (increase used, decrease remaining).
- * @param {string} uid
- * @param {string} creditId
- * @param {number} amount
- */
-export const useCreditAmount = async (uid, creditId, amount) => {
-  const snap = await getDoc(doc(creditsCol(uid), creditId));
-  if (!snap.exists()) throw new Error("Credit not found");
-  const credit = snap.data();
-  const newUsed = (credit.used || 0) + amount;
-  const newRemaining = (credit.amount || 0) - newUsed;
-  await updateDoc(doc(creditsCol(uid), creditId), {
-    used: newUsed,
-    remaining: Math.max(0, newRemaining),
-  });
-};
-
-/**
- * Repay credit (decrease used, increase remaining).
- * @param {string} uid
- * @param {string} creditId
- * @param {number} amount
- */
-export const repayCredit = async (uid, creditId, amount) => {
-  const snap = await getDoc(doc(creditsCol(uid), creditId));
-  if (!snap.exists()) throw new Error("Credit not found");
-  const credit = snap.data();
-  const newUsed = Math.max(0, (credit.used || 0) - amount);
-  const newRemaining = Math.min(credit.amount || 0, (credit.remaining || 0) + amount);
-  await updateDoc(doc(creditsCol(uid), creditId), {
-    used: newUsed,
-    remaining: newRemaining,
-  });
-};
-
-/**
- * Get total credit summary across all credits.
- * @param {string} uid
- * @returns {Promise<{ total: number, used: number, remaining: number }>}
- */
-export const getCreditSummary = async (uid) => {
-  const snap = await getDocs(creditsCol(uid));
-  const credits = snap.docs.map((d) => d.data());
-  return credits.reduce(
-    (acc, c) => ({
-      total: acc.total + (c.amount || 0),
-      used: acc.used + (c.used || 0),
-      remaining: acc.remaining + (c.remaining || 0),
-    }),
-    { total: 0, used: 0, remaining: 0 },
-  );
-};

@@ -37,7 +37,6 @@ import ExpensesDetailScreen from "./src/screens/ExpensesDetailScreen";
 import AddInvestmentScreen from "./src/screens/AddInvestmentScreen";
 import InvestmentsDetailScreen from "./src/screens/InvestmentsDetailScreen";
 import SpendingDetailsScreen from "./src/screens/SpendingDetailsScreen";
-import AddCreditScreen from "./src/screens/AddCreditScreen";
 import ReportsScreen from "./src/screens/ReportsScreen";
 import { GlobalAlertComponent } from "./src/components/GlobalAlert";
 import { TabView, SceneMap, TabBar } from "react-native-tab-view";
@@ -71,7 +70,6 @@ function AppStack() {
         component={InvestmentsDetailScreen}
       />
       <Stack.Screen name="SpendingDetails" component={SpendingDetailsScreen} />
-      <Stack.Screen name="AddCredit" component={AddCreditScreen} />
       <Stack.Screen name="Reports" component={ReportsScreen} />
     </Stack.Navigator>
   );

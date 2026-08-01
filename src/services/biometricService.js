@@ -15,6 +15,7 @@ export const isBiometricAvailable = async () => {
 
 /**
  * Prompt for biometric authentication.
+ * @returns {Promise<{ success: boolean, error?: string }>}
  */
 export const authenticateWithBiometrics = async () => {
   const result = await LocalAuthentication.authenticateAsync({
@@ -22,7 +23,13 @@ export const authenticateWithBiometrics = async () => {
     cancelLabel: "Use password",
     disableDeviceFallback: false,
   });
-  return result.success;
+  if (result.success) {
+    return { success: true };
+  }
+  return {
+    success: false,
+    error: result.error || "authentication_failed",
+  };
 };
 
 /**

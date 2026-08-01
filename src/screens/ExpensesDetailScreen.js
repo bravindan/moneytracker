@@ -388,19 +388,9 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
         totalSpending: totalSpending,
       });
 
-      setAllSpending((prev) => [
-        ...prev,
-        {
-          category: selectedCategory,
-          amount: amount,
-          description: spendingDescription,
-          itemName: spendingItemName,
-          date: spendingDate,
-          month: selectedMonth,
-          transactionCosts: transactionCost,
-          totalSpending: totalSpending,
-        },
-      ]);
+      // Reload spending so Unallocated funding entries are included
+      const spendingData = await getSpending(user.uid, selectedMonth);
+      setAllSpending(spendingData);
 
       Alert.alert("Success", "Spending added successfully!");
       setShowSpendingModal(false);

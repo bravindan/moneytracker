@@ -23,11 +23,7 @@ import {
   updateExpense,
   deleteExpense,
   getUserProfile,
-  getActiveCredits,
-  useCreditAmount,
-  addSpending,
 } from "../services/firestoreService";
-import CreditModal from "../components/CreditModal";
 import IOSSpinner from "../components/IOSSpinner";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -80,14 +76,6 @@ const AddExpenseScreen = ({ navigation, route }) => {
   // Expenses list
   const [expenses, setExpenses] = useState([]);
 
-  // Credit modal state
-  const [showCreditModal, setShowCreditModal] = useState(false);
-  const [savingsBalance, setSavingsBalance] = useState(0);
-  const [creditRemaining, setCreditRemaining] = useState(0);
-  const [overspendAmount, setOverspendAmount] = useState(0);
-  const [pendingExpenseData, setPendingExpenseData] = useState(null);
-
-
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
@@ -110,24 +98,6 @@ const AddExpenseScreen = ({ navigation, route }) => {
         const monthlyData = await getMonthlySummary(user.uid, selectedMonth);
         const expenseAllocation = monthlyData?.expensesAmount || 0;
         setAllocatedAmount(expenseAllocation);
-
-        // Calculate savings balance (balance minus unallocated spending)
-        const spendingData = await import("../services/firestoreService").then(m =>
-          m.getSpending(user.uid, selectedMonth)
-        );
-        const unallocatedSpending = (spendingData || [])
-          .filter((s) => s.category === "Unallocated")
-          .reduce((sum, s) => sum + (s.totalSpending || s.amount || 0), 0);
-        const balance = (monthlyData?.balance || 0) - unallocatedSpending;
-        setSavingsBalance(balance > 0 ? balance : 0);
-
-        // Get active credits
-        const activeCredits = await getActiveCredits(user.uid);
-        const totalCreditRemaining = activeCredits.reduce(
-          (sum, c) => sum + (c.remaining || 0),
-          0
-        );
-        setCreditRemaining(totalCreditRemaining);
 
         // Update predefined categories with user-created ones
         const userCategories = expensesData
@@ -210,32 +180,6 @@ const AddExpenseScreen = ({ navigation, route }) => {
 
     const expenseAmount = parseFloat(amount);
 
-    // Check for overspend (only for new expenses, not edits)
-    if (!editingId && allocatedAmount > 0) {
-      const currentExpensesTotal = expenses.reduce(
-        (sum, e) => sum + (e.amount || 0),
-        0
-      );
-      const newTotal = currentExpensesTotal + expenseAmount;
-      const remaining = allocatedAmount - currentExpensesTotal;
-
-      if (expenseAmount > remaining && remaining < allocatedAmount) {
-        // Overspend detected - check if savings or credit is available
-        if (savingsBalance > 0 || creditRemaining > 0) {
-          const overAmount = expenseAmount - remaining;
-          setOverspendAmount(overAmount);
-          setPendingExpenseData({
-            category: category.trim(),
-            amount: expenseAmount,
-            month: selectedMonth,
-            createdAt: new Date(),
-          });
-          setShowCreditModal(true);
-          return;
-        }
-      }
-    }
-
     // Proceed with normal expense save
     await saveExpense({
       category: category.trim(),
@@ -245,8 +189,8 @@ const AddExpenseScreen = ({ navigation, route }) => {
     });
   };
 
-  // Save expense (with optional funding source)
-  const saveExpense = async (expenseData, fundingSource = null) => {
+  // Save expense
+  const saveExpense = async (expenseData) => {
     setLoading(true);
     try {
       if (editingId) {
@@ -258,43 +202,12 @@ const AddExpenseScreen = ({ navigation, route }) => {
         );
         Alert.alert("Success", "Expense updated successfully!");
       } else {
-        // Add funding source info to expense
-        const dataWithFunding = fundingSource
-          ? { ...expenseData, fundingSource: fundingSource.source }
-          : expenseData;
+        const expenseRef = await addExpense(user.uid, expenseData);
+        const newExpense = { id: expenseRef.id, ...expenseData };
+        const updatedExpenses = [...expenses, newExpense];
+        setExpenses(updatedExpenses);
 
-        const expenseRef = await addExpense(user.uid, dataWithFunding);
-        const newExpense = { id: expenseRef.id, ...dataWithFunding };
-        setExpenses([...expenses, newExpense]);
-
-        // If using savings, record as unallocated spending
-        if (fundingSource?.useSavings && fundingSource.savingsAmount > 0) {
-          await addSpending(user.uid, {
-            category: "Unallocated",
-            amount: fundingSource.savingsAmount,
-            itemName: `Overspend: ${expenseData.category}`,
-            description: "Used savings for overspend",
-            date: new Date(),
-          });
-        }
-
-        // If using credit, mark credit as used
-        if (fundingSource?.useCredit && fundingSource.creditAmount > 0) {
-          // Get active credits and use the first available
-          const activeCredits = await getActiveCredits(user.uid);
-          let remainingToUse = fundingSource.creditAmount;
-          for (const credit of activeCredits) {
-            if (remainingToUse <= 0) break;
-            const available = credit.remaining || 0;
-            const toUse = Math.min(remainingToUse, available);
-            if (toUse > 0) {
-              await useCreditAmount(user.uid, credit.id, toUse);
-              remainingToUse -= toUse;
-            }
-          }
-        }
-
-        Alert.alert("Success", "Expense added successfully!");
+        Alert.alert("Success", "Expense category allocated successfully!");
       }
       clearForm();
     } catch (error) {
@@ -303,21 +216,6 @@ const AddExpenseScreen = ({ navigation, route }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Handle credit modal confirmation
-  const handleCreditModalConfirm = async (fundingSource) => {
-    setShowCreditModal(false);
-    if (pendingExpenseData) {
-      await saveExpense(pendingExpenseData, fundingSource);
-      setPendingExpenseData(null);
-    }
-  };
-
-  // Handle credit modal close
-  const handleCreditModalClose = () => {
-    setShowCreditModal(false);
-    setPendingExpenseData(null);
   };
 
   // Edit expense
@@ -638,17 +536,6 @@ const AddExpenseScreen = ({ navigation, route }) => {
         }}
       />
       </KeyboardAvoidingView>
-
-      {/* Credit Modal for Overspend */}
-      <CreditModal
-        visible={showCreditModal}
-        onClose={handleCreditModalClose}
-        onConfirm={handleCreditModalConfirm}
-        overspendAmount={overspendAmount}
-        savingsBalance={savingsBalance}
-        creditRemaining={creditRemaining}
-        currencyCode={currencyCode}
-      />
     </View>
   );
 };

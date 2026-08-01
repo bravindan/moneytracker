@@ -198,7 +198,9 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [biometricAvailable, setBiometricAvailable] = useState(false);
@@ -217,8 +219,14 @@ export default function LoginScreen({ navigation }) {
 
   const handleBiometricLogin = async () => {
     setError("");
-    const authenticated = await authenticateWithBiometrics();
-    if (!authenticated) return;
+    const result = await authenticateWithBiometrics();
+    if (!result.success) {
+      // User cancelled or auth failed — stay silent on cancel, show error otherwise
+      if (result.error && result.error !== "user_cancel") {
+        setError("Biometric authentication failed. Please sign in with your password.");
+      }
+      return;
+    }
 
     const credentials = await getSavedCredentials();
     if (!credentials) {
@@ -252,10 +260,10 @@ export default function LoginScreen({ navigation }) {
       setLoading(true);
       try {
         await loginUser(loginEmail.trim(), password);
-        // Save credentials if biometric is enabled (for fingerprint login)
+        // Always keep stored credentials fresh so biometric login can be
+        // enabled at any time from Settings.
         if (biometricAvailable) {
           await saveCredentials(loginEmail.trim(), password);
-          setBiometricLoginEnabled(true);
         }
       } catch {
         setError("Invalid credentials.");
@@ -279,6 +287,10 @@ export default function LoginScreen({ navigation }) {
       }
       if (password.length < 6) {
         setError("Password must be at least 6 characters.");
+        return;
+      }
+      if (confirmPassword !== password) {
+        setError("Passwords do not match.");
         return;
       }
       setLoading(true);
@@ -363,6 +375,7 @@ export default function LoginScreen({ navigation }) {
                 onPress={() => {
                   setMode(key);
                   setError("");
+                  setConfirmPassword("");
                 }}
                 style={[
                   styles.tabButton,
@@ -569,6 +582,49 @@ export default function LoginScreen({ navigation }) {
               </TouchableOpacity>
             )}
           </View>
+
+          {/* ── Confirm Password (register only) ── */}
+          {mode === "register" && (
+            <View style={{ marginBottom: 20 }}>
+              <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                Confirm Password
+              </Text>
+              <View
+                style={[
+                  styles.inputContainer,
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <TextInput
+                  style={[styles.inputWithIcon, { color: theme.colors.text }]}
+                  placeholder="Re-enter your password"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  secureTextEntry={!showConfirmPassword}
+                  value={confirmPassword}
+                  onChangeText={(t) => {
+                    setConfirmPassword(t);
+                    setError("");
+                  }}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={styles.iconButton}
+                >
+                  <Text
+                    style={[
+                      styles.iconButtonText,
+                      { color: theme.colors.tabBarActive },
+                    ]}
+                  >
+                    {showConfirmPassword ? "Hide" : "Show"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* ── Error ── */}
           {error ? (

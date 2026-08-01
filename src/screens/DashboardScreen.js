@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  AppState,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -23,8 +24,7 @@ import {
   getUserProfile,
   getSpending,
   getInvestments,
-  getCredits,
-  getCreditSummary,
+  getExpenses,
   deleteMonthlySummary,
   addSpending,
   updateUserProfile,
@@ -451,9 +451,6 @@ export default function DashboardScreen({ navigation }) {
   const [showOtherAllocations, setShowOtherAllocations] = useState(false);
   const [allSpending, setAllSpending] = useState([]);
   const [investments, setInvestments] = useState([]);
-  const [credits, setCredits] = useState([]);
-  const [creditSummary, setCreditSummary] = useState({ total: 0, used: 0, remaining: 0 });
-  const [showCreditAmount, setShowCreditAmount] = useState(false);
   const [showRecordMenu, setShowRecordMenu] = useState(false);
 
   // Auto month switch
@@ -484,13 +481,13 @@ export default function DashboardScreen({ navigation }) {
   const fetchMonthlyData = useCallback(async () => {
     if (!uid) return;
     try {
-      const [data, spendingData, invData, creditData, creditSum] = await Promise.all([
-        getMonthlySummary(uid, selectedMonth),
-        getSpending(uid, selectedMonth),
-        getInvestments(uid, selectedMonth),
-        getCredits(uid),
-        getCreditSummary(uid),
-      ]);
+      const [data, spendingData, invData, expensesData] =
+        await Promise.all([
+          getMonthlySummary(uid, selectedMonth),
+          getSpending(uid, selectedMonth),
+          getInvestments(uid, selectedMonth),
+          getExpenses(uid, selectedMonth),
+        ]);
 
       if (data) {
         setMonthlyData(data);
@@ -500,15 +497,11 @@ export default function DashboardScreen({ navigation }) {
 
       setAllSpending(spendingData || []);
       setInvestments(invData || []);
-      setCredits(creditData || []);
-      setCreditSummary(creditSum || { total: 0, used: 0, remaining: 0 });
     } catch (error) {
       console.error("Failed to fetch monthly data:", error);
       setMonthlyData(null);
       setAllSpending([]);
       setInvestments([]);
-      setCredits([]);
-      setCreditSummary({ total: 0, used: 0, remaining: 0 });
     } finally {
       setLoading(false);
     }
@@ -526,14 +519,27 @@ export default function DashboardScreen({ navigation }) {
     }, [fetchProfile, fetchMonthlyData]),
   );
 
-  // Auto-switch to current month when toggle is ON
+  // Auto-switch to current month when toggle is ON.
+  // Re-checks on mount, when the toggle changes, and when the app
+  // resumes from the background (e.g. relaunched after a month boundary).
   useEffect(() => {
-    if (autoMonthSwitch) {
-      const currentMonth = new Date().toISOString().slice(0, 7);
-      if (selectedMonth !== currentMonth) {
-        setSelectedMonth(currentMonth);
+    const snapToCurrentMonth = () => {
+      if (autoMonthSwitch) {
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        setSelectedMonth((prev) => {
+          if (prev !== currentMonth) setLoading(true);
+          return currentMonth;
+        });
       }
-    }
+    };
+
+    snapToCurrentMonth();
+
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") snapToCurrentMonth();
+    });
+
+    return () => sub.remove();
   }, [autoMonthSwitch]);
 
   const onRefresh = useCallback(async () => {
@@ -1349,125 +1355,6 @@ export default function DashboardScreen({ navigation }) {
                   </>
                 );
               })()}
-            </View>
-          </View>
-
-          {/* ── Credit Card ── */}
-          <View
-            style={[styles.cardPurple, { backgroundColor: theme.colors.card }]}
-          >
-            <View style={styles.cardHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Ionicons
-                  name="card-outline"
-                  size={20}
-                  color="#f59e0b"
-                  style={{ marginRight: 8 }}
-                />
-                <Text
-                  style={[styles.sectionTitle, { color: theme.colors.text }]}
-                >
-                  Credit
-                </Text>
-              </View>
-              <View style={styles.cardActions}>
-                <TouchableOpacity
-                  style={[
-                    styles.cardToggle,
-                    { borderColor: theme.colors.border },
-                  ]}
-                  onPress={() => setShowCreditAmount(!showCreditAmount)}
-                >
-                  <Ionicons
-                    name={showCreditAmount ? "eye-off-outline" : "eye-outline"}
-                    size={16}
-                    color={theme.colors.tabBarActive}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.actionButton,
-                    { borderColor: theme.colors.border },
-                  ]}
-                  onPress={() =>
-                    navigation.navigate("AddCredit", { selectedMonth })
-                  }
-                >
-                  <Ionicons
-                    name="add-outline"
-                    size={16}
-                    color={theme.colors.tabBarActive}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.actionButton,
-                    { borderColor: theme.colors.border },
-                  ]}
-                  onPress={() =>
-                    navigation.navigate("AddCredit", { selectedMonth })
-                  }
-                >
-                  <Ionicons
-                    name="chevron-forward-outline"
-                    size={16}
-                    color={theme.colors.tabBarActive}
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.expenseSummary}>
-              <View style={styles.summaryRow}>
-                <Text
-                  style={[
-                    styles.summaryLabel,
-                    { color: theme.colors.textSecondary, flex: 1 },
-                  ]}
-                >
-                  Total Credit:
-                </Text>
-                <Text
-                  style={[styles.summaryValue, { color: theme.colors.text }]}
-                >
-                  {showCreditAmount ? fmt(creditSummary.total) : "•••••"}
-                </Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text
-                  style={[
-                    styles.summaryLabel,
-                    { color: theme.colors.textSecondary, flex: 1 },
-                  ]}
-                >
-                  Used:
-                </Text>
-                <Text
-                  style={[styles.summaryValue, { color: "#f59e0b" }]}
-                >
-                  {showCreditAmount ? fmt(creditSummary.used) : "•••••"}
-                </Text>
-              </View>
-              <View style={[styles.summaryRow, styles.balanceRow]}>
-                <Text
-                  style={[
-                    styles.summaryLabel,
-                    { color: theme.colors.textSecondary, flex: 1 },
-                  ]}
-                >
-                  Remaining:
-                </Text>
-                <Text
-                  style={[
-                    styles.summaryValue,
-                    {
-                      color: creditSummary.remaining > 0 ? "#10b981" : theme.colors.textSecondary,
-                    },
-                  ]}
-                >
-                  {showCreditAmount ? fmt(creditSummary.remaining) : "•••••"}
-                </Text>
-              </View>
             </View>
           </View>
 
