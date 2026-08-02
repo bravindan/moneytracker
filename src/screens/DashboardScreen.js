@@ -10,13 +10,14 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Image,
   AppState,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import IOSSpinner from "../components/IOSSpinner";
+import DashboardHeader from "../components/DashboardHeader";
+import MonthPickerModal from "../components/MonthPickerModal";
 import * as SplashScreen from "expo-splash-screen";
 import { getCurrentUser, logoutUser } from "../services/authService";
 import {
@@ -41,16 +42,6 @@ const formatMonthName = (monthString) => {
   return date.toLocaleString("default", { month: "long", year: "numeric" });
 };
 
-const generateAvatar = (name, theme) => {
-  const firstLetter = name ? name.charAt(0).toUpperCase() : "?";
-  return {
-    text: firstLetter,
-    color: theme.colors.primary,
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
-  };
-};
-
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
@@ -62,102 +53,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-  },
-  headerContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  stickyHeader: {
-    position: "sticky",
-    top: 0,
-    zIndex: 100,
-    backgroundColor: "transparent",
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  profilePhotoPlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 16,
-    overflow: "hidden",
-  },
-  userText: {
-    flex: 1,
-  },
-  headerWelcome: {
-    fontSize: 12,
-    marginBottom: 2,
-  },
-  headerName: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  signOutButton: {
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  signOutText: {
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    marginTop: 8,
-  },
-  monthPickerContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 12,
-    paddingHorizontal: 4,
-  },
-  monthText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  monthButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  monthButtonText: {
-    fontWeight: "600",
-  },
-  addRecordButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  addRecordButtonText: {
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  recordMenuButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 8,
   },
   recordMenu: {
     position: "absolute",
@@ -413,14 +308,15 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
   },
-  avatarText: {
-    fontSize: 20,
-    fontWeight: "bold",
+  addRecordButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginLeft: 8,
   },
-  profileImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+  addRecordButtonText: {
+    fontWeight: "600",
+    fontSize: 14,
   },
 });
 
@@ -625,8 +521,6 @@ export default function DashboardScreen({ navigation }) {
     user?.email?.split("@")[0] ||
     "User";
 
-  const profileImageUri = profile?.profileImage || null;
-
   const changeMonth = (direction) => {
     const [year, month] = selectedMonth.split("-").map(Number);
     let newYear = year;
@@ -774,91 +668,22 @@ export default function DashboardScreen({ navigation }) {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.tabBarActive]} progressBackgroundColor={theme.colors.card} tintColor={theme.colors.tabBarActive} />
           }
         >
-          <View
-            style={[
-              styles.headerContainer,
-              {
-                backgroundColor: theme.colors.card,
-              },
-            ]}
-          >
-            <View style={styles.headerRow}>
-              <View>
-                <Text
-                  style={[
-                    styles.headerWelcome,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Welcome back 👋
-                </Text>
-                <Text style={[styles.headerName, { color: theme.colors.text }]}>
-                  {displayName}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={handleLogout}
-                style={[
-                  styles.signOutButton,
-                  { borderColor: theme.colors.border },
-                ]}
-              >
-                <Ionicons name="log-out-outline" size={20} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-            <Text
-              style={[
-                styles.headerSubtitle,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              Monthly Financial Overview
-            </Text>
-            <View style={styles.monthPickerContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.monthButton,
-                  { backgroundColor: theme.colors.tabBarActive },
-                ]}
-                onPress={() => changeMonth(-1)}
-              >
-                <Text style={[styles.monthButtonText, { color: "#ffffff" }]}>
-                  ‹
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  setPickerYear(parseInt(selectedMonth.split("-")[0]));
-                  setShowMonthPicker(true);
-                }}
-                style={{ paddingHorizontal: 10, paddingVertical: 4 }}
-              >
-                <Text style={[styles.monthText, { color: theme.colors.text }]}>
-                  {selectedMonth} ▾
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.monthButton,
-                  { backgroundColor: theme.colors.tabBarActive },
-                ]}
-                onPress={() => changeMonth(1)}
-              >
-                <Text style={[styles.monthButtonText, { color: "#ffffff" }]}>
-                  ›
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addRecordButton,
-                  { backgroundColor: theme.colors.tabBarActive },
-                ]}
-                onPress={() => navigation.navigate("MonthlyRecord", { month: selectedMonth })}
-              >
-                <Text style={styles.addRecordButtonText}>+ Add Record</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <DashboardHeader
+            displayName={displayName}
+            profileImageUri={profile?.profileImage}
+            selectedMonth={selectedMonth}
+            autoMonthSwitch={autoMonthSwitch}
+            hasRecord={false}
+            onChangeMonth={changeMonth}
+            onOpenMonthPicker={() => {
+              setPickerYear(parseInt(selectedMonth.split("-")[0]));
+              setShowMonthPicker(true);
+            }}
+            onToggleAutoMonthSwitch={toggleAutoMonthSwitch}
+            onOpenRecordMenu={() => setShowRecordMenu(true)}
+            onLogout={handleLogout}
+            onOpenProfile={() => navigation.navigate("Profile")}
+          />
           <View style={styles.contentContainer}>
             <View
               style={[
@@ -908,6 +733,19 @@ export default function DashboardScreen({ navigation }) {
             </View>
           </View>
         </ScrollView>
+
+        {/* Month Picker Modal */}
+        <MonthPickerModal
+          visible={showMonthPicker}
+          selectedMonth={selectedMonth}
+          pickerYear={pickerYear}
+          onChangeYear={setPickerYear}
+          onSelectMonth={(month) => {
+            if (selectedMonth !== month) setLoading(true);
+            setSelectedMonth(month);
+          }}
+          onClose={() => setShowMonthPicker(false)}
+        />
       </View>
     );
   }
@@ -921,174 +759,23 @@ export default function DashboardScreen({ navigation }) {
     >
       <StatusBar style={theme.isDark ? "light" : "dark"} />
 
-      {/* Header with Month Navigation */}
-      <View
-        style={[
-          styles.headerContainer,
-          {
-            backgroundColor: theme.colors.card,
-          },
-        ]}
-      >
-        <View style={styles.headerRow}>
-          <View style={styles.userInfo}>
-            <View style={styles.userHeader}>
-              <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
-                <View
-                  style={[
-                    styles.profilePhotoPlaceholder,
-                    {
-                      backgroundColor: theme.colors.tabBarActive,
-                    },
-                  ]}
-                >
-                  {profileImageUri ? (
-                    <Image
-                      source={{ uri: profileImageUri }}
-                      style={styles.profileImage}
-                    />
-                  ) : (
-                    <Text style={{ color: "#fff", fontSize: 20, fontWeight: "bold" }}>
-                      {displayName ? displayName.charAt(0).toUpperCase() : "?"}
-                    </Text>
-                  )}
-                </View>
-              </TouchableOpacity>
-              <View style={styles.userText}>
-                <Text
-                  style={[
-                    styles.headerWelcome,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Welcome back 👋
-                </Text>
-                <Text style={[styles.headerName, { color: theme.colors.text }]}>
-                  {displayName}
-                </Text>
-              </View>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={[styles.signOutButton, { borderColor: theme.colors.border }]}
-            onPress={handleLogout}
-          >
-            <Ionicons name="log-out-outline" size={20} color="#ef4444" />
-          </TouchableOpacity>
-        </View>
-        <Text
-          style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}
-        >
-          Monthly Financial Overview
-        </Text>
-        <View style={styles.monthPickerContainer}>
-          <TouchableOpacity
-            style={[
-              styles.monthButton,
-              { backgroundColor: theme.colors.tabBarActive },
-            ]}
-            onPress={() => changeMonth(-1)}
-          >
-            <Text style={[styles.monthButtonText, { color: "#ffffff" }]}>
-              ‹
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => {
-              setPickerYear(parseInt(selectedMonth.split("-")[0]));
-              setShowMonthPicker(true);
-            }}
-            style={{ paddingHorizontal: 10, paddingVertical: 4 }}
-          >
-            <Text style={[styles.monthText, { color: theme.colors.text }]}>
-              {selectedMonth} ▾
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.monthButton,
-              { backgroundColor: theme.colors.tabBarActive },
-            ]}
-            onPress={() => changeMonth(1)}
-          >
-            <Text style={[styles.monthButtonText, { color: "#ffffff" }]}>
-              ›
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={toggleAutoMonthSwitch}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginLeft: 8,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderRadius: 8,
-              backgroundColor: autoMonthSwitch ? theme.colors.tabBarActive + "20" : "transparent",
-            }}
-          >
-            <View
-              style={{
-                width: 36,
-                height: 20,
-                borderRadius: 10,
-                backgroundColor: autoMonthSwitch ? theme.colors.tabBarActive : theme.colors.border,
-                justifyContent: "center",
-                paddingHorizontal: 2,
-              }}
-            >
-              <View
-                style={{
-                  width: 16,
-                  height: 16,
-                  borderRadius: 8,
-                  backgroundColor: "#fff",
-                  alignSelf: autoMonthSwitch ? "flex-end" : "flex-start",
-                }}
-              />
-            </View>
-            <Ionicons
-              name="sync-outline"
-              size={14}
-              color={autoMonthSwitch ? theme.colors.tabBarActive : theme.colors.textSecondary}
-              style={{ marginLeft: 4 }}
-            />
-          </TouchableOpacity>
-          {!monthlyData && (
-            <TouchableOpacity
-              style={[
-                styles.addRecordButton,
-                { backgroundColor: theme.colors.tabBarActive },
-              ]}
-              onPress={() => navigation.navigate("MonthlyRecord", { month: selectedMonth })}
-            >
-              <Text style={styles.addRecordButtonText}>+ Add Record</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={[styles.recordMenuButton, { borderColor: theme.colors.border }]}
-            onPress={() => setShowRecordMenu(true)}
-          >
-            <Ionicons
-              name="ellipsis-vertical"
-              size={18}
-              color={theme.colors.text}
-            />
-          </TouchableOpacity>
-        </View>
-        <Text
-          style={{
-            fontSize: 11,
-            color: theme.colors.textSecondary,
-            textAlign: "center",
-            marginTop: 4,
-          }}
-        >
-          {autoMonthSwitch
-            ? "Auto-switch ON — app opens to current month"
-            : "Auto-switch OFF — stays on selected month"}
-        </Text>
-      </View>
+      {/* Header with Month Navigation — persistent across month switches */}
+      <DashboardHeader
+        displayName={displayName}
+        profileImageUri={profile?.profileImage}
+        selectedMonth={selectedMonth}
+        autoMonthSwitch={autoMonthSwitch}
+        hasRecord={!!monthlyData}
+        onChangeMonth={changeMonth}
+        onOpenMonthPicker={() => {
+          setPickerYear(parseInt(selectedMonth.split("-")[0]));
+          setShowMonthPicker(true);
+        }}
+        onToggleAutoMonthSwitch={toggleAutoMonthSwitch}
+        onOpenRecordMenu={() => setShowRecordMenu(true)}
+        onLogout={handleLogout}
+        onOpenProfile={() => navigation.navigate("Profile")}
+      />
 
       {/* Scrollable Content */}
       <ScrollView
@@ -1863,128 +1550,17 @@ export default function DashboardScreen({ navigation }) {
       </ScrollView>
 
       {/* Month Picker Modal */}
-      <Modal
+      <MonthPickerModal
         visible={showMonthPicker}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setShowMonthPicker(false)}
-      >
-        <TouchableOpacity
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-          activeOpacity={1}
-          onPress={() => setShowMonthPicker(false)}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={{
-              width: "80%",
-              padding: 20,
-              backgroundColor: theme.colors.card,
-              borderRadius: 16,
-              shadowColor: "#000",
-              shadowOpacity: 0.25,
-              shadowRadius: 4,
-              elevation: 5,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 20,
-              }}
-            >
-              <TouchableOpacity
-                onPress={() => setPickerYear(pickerYear - 1)}
-                style={{ padding: 10 }}
-              >
-                <Ionicons
-                  name="chevron-back"
-                  size={24}
-                  color={theme.colors.text}
-                />
-              </TouchableOpacity>
-              <Text
-                style={{
-                  fontSize: 20,
-                  fontWeight: "bold",
-                  color: theme.colors.text,
-                }}
-              >
-                {pickerYear}
-              </Text>
-              <TouchableOpacity
-                onPress={() => setPickerYear(pickerYear + 1)}
-                style={{ padding: 10 }}
-              >
-                <Ionicons
-                  name="chevron-forward"
-                  size={24}
-                  color={theme.colors.text}
-                />
-              </TouchableOpacity>
-            </View>
-            <View
-              style={{
-                flexDirection: "row",
-                flexWrap: "wrap",
-                justifyContent: "space-between",
-              }}
-            >
-              {Array.from({ length: 12 }).map((_, i) => {
-                const isSelected =
-                  selectedMonth ===
-                  `${pickerYear}-${String(i + 1).padStart(2, "0")}`;
-                return (
-                  <TouchableOpacity
-                    key={i}
-                    style={{
-                      width: "30%",
-                      height: 40,
-                      justifyContent: "center",
-                      alignItems: "center",
-                      marginBottom: 12,
-                      borderRadius: 8,
-                      backgroundColor: isSelected
-                        ? theme.colors.tabBarActive
-                        : theme.colors.background,
-                    }}
-                    onPress={() => {
-                      if (
-                        selectedMonth !==
-                        `${pickerYear}-${String(i + 1).padStart(2, "0")}`
-                      ) {
-                        setLoading(true);
-                      }
-                      setSelectedMonth(
-                        `${pickerYear}-${String(i + 1).padStart(2, "0")}`,
-                      );
-                      setShowMonthPicker(false);
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: isSelected ? "#fff" : theme.colors.text,
-                        fontWeight: isSelected ? "bold" : "normal",
-                      }}
-                    >
-                      {new Date(2000, i).toLocaleString("default", {
-                        month: "short",
-                      })}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        selectedMonth={selectedMonth}
+        pickerYear={pickerYear}
+        onChangeYear={setPickerYear}
+        onSelectMonth={(month) => {
+          if (selectedMonth !== month) setLoading(true);
+          setSelectedMonth(month);
+        }}
+        onClose={() => setShowMonthPicker(false)}
+      />
 
       {/* Monthly Record Actions Menu */}
       <Modal

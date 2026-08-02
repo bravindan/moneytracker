@@ -12,9 +12,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
 import IOSSpinner from "../components/IOSSpinner";
+import ChangelogModal from "../components/ChangelogModal";
 import * as Updates from "expo-updates";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { CHANGELOG, CURRENT_VERSION } from "../data/changelog";
 
-const APP_VERSION = "3.0.0";
+const APP_VERSION = CURRENT_VERSION;
+const SEEN_CHANGELOG_KEY = "moneytracker_seen_changelog";
 
 const AboutScreen = ({ navigation }) => {
   const { theme } = useTheme();
@@ -22,11 +26,48 @@ const AboutScreen = ({ navigation }) => {
   const [checking, setChecking] = useState(false);
   const [lastChecked, setLastChecked] = useState(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [hasUnseenChanges, setHasUnseenChanges] = useState(false);
+
+  // Mark the changelog as seen for the current version once opened.
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(SEEN_CHANGELOG_KEY);
+        if (mounted) setHasUnseenChanges(seen !== APP_VERSION);
+      } catch (error) {
+        console.error("Failed to read changelog seen state:", error);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const openChangelog = async () => {
+    setShowChangelog(true);
+    try {
+      await AsyncStorage.setItem(SEEN_CHANGELOG_KEY, APP_VERSION);
+      setHasUnseenChanges(false);
+    } catch (error) {
+      console.error("Failed to save changelog seen state:", error);
+    }
+  };
 
   const checkForUpdates = async () => {
     setChecking(true);
     setUpdateAvailable(false);
     try {
+      // expo-updates doesn't support checking in development builds.
+      if (__DEV__) {
+        setLastChecked(new Date().toLocaleString());
+        Alert.alert(
+          "Dev Build Only",
+          "Checking for updates isn't available in development builds. It works in production builds installed from the store or via EAS Update."
+        );
+        return;
+      }
       const update = await Updates.checkForUpdateAsync();
       if (update.isAvailable) {
         setUpdateAvailable(true);
@@ -73,6 +114,15 @@ const AboutScreen = ({ navigation }) => {
           : "Tap to check for updates",
       icon: "sync-outline",
       onPress: checkForUpdates,
+    },
+    {
+      title: "What's New",
+      subtitle: hasUnseenChanges
+        ? `New in v${APP_VERSION} — tap to view`
+        : "View the latest changes",
+      icon: "sparkles-outline",
+      onPress: openChangelog,
+      badge: hasUnseenChanges,
     },
     {
       title: "App Version",
@@ -136,10 +186,10 @@ const AboutScreen = ({ navigation }) => {
               />
               <View style={{ marginLeft: 12 }}>
                 <Text style={[styles.updateTitle, { color: theme.colors.text }]}>
-                  {checking ? "Checking for updates..." : updateAvailable ? "Update Available" : "You're up to date"}
+                  {checking ? "Checking for updates..." : updateAvailable ? "Update Available" : "Check for Updates"}
                 </Text>
                 <Text style={[styles.updateSubtitle, { color: theme.colors.textSecondary }]}>
-                  {checking ? "Please wait" : updateAvailable ? "Tap to update now" : `Version ${APP_VERSION}`}
+                  {checking ? "Please wait" : updateAvailable ? "Tap to update now" : "Tap to check for a new version"}
                 </Text>
               </View>
             </View>
@@ -171,6 +221,11 @@ const AboutScreen = ({ navigation }) => {
                   {item.subtitle}
                 </Text>
               </View>
+              {item.badge && (
+                <View style={[styles.badge, { backgroundColor: theme.colors.tabBarActive }]}>
+                  <Text style={styles.badgeText}>NEW</Text>
+                </View>
+              )}
               {item.onPress && (
                 <Ionicons name="chevron-forward-outline" size={18} color={theme.colors.textSecondary} />
               )}
@@ -183,6 +238,13 @@ const AboutScreen = ({ navigation }) => {
           MoneyTracker - Your Personal Finance Companion
         </Text>
       </ScrollView>
+
+      {/* Changelog Modal */}
+      <ChangelogModal
+        visible={showChangelog}
+        entries={CHANGELOG}
+        onClose={() => setShowChangelog(false)}
+      />
     </View>
   );
 };
@@ -241,6 +303,17 @@ const styles = StyleSheet.create({
   menuTextContainer: { flex: 1 },
   menuTitle: { fontSize: 15, fontWeight: "500", marginBottom: 2 },
   menuSubtitle: { fontSize: 12 },
+  badge: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginRight: 8,
+  },
+  badgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "bold",
+  },
   footer: { fontSize: 12, textAlign: "center", marginTop: 20 },
 });
 
