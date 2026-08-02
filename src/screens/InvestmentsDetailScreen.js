@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../contexts/ThemeContext";
 import IOSSpinner from "../components/IOSSpinner";
+import { useFocusEffect } from "@react-navigation/native";
 import { getCurrentUser } from "../services/authService";
 import {
   getInvestments,
@@ -61,6 +62,14 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
       loadData();
     }
   }, [uid, selectedMonth]);
+
+  // Reload when returning to this screen (e.g. after adding an investment)
+  // so the summary and table always reflect the latest data.
+  useFocusEffect(
+    useCallback(() => {
+      if (uid) loadData();
+    }, [uid, selectedMonth]),
+  );
 
   const loadData = async () => {
     try {
@@ -277,7 +286,7 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
     return [
       investment.category || "",
       investment.platform || "",
-      investment.amount.toLocaleString(),
+      (investment.amount ?? 0).toLocaleString(),
       (investment.transactionCosts || 0).toLocaleString(),
       formatDate(investment.createdAt),
     ];
@@ -320,16 +329,30 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
           Investment Summary
         </Text>
-        <TouchableOpacity
-          style={[styles.pdfButton, { borderColor: theme.colors.border }]}
-          onPress={generatePDF}
-        >
-          <Ionicons
-            name="print-outline"
-            size={20}
-            color={theme.colors.tabBarActive}
-          />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.headerActionButton, { borderColor: theme.colors.border }]}
+            onPress={() =>
+              navigation.navigate("AddInvestment", { selectedMonth })
+            }
+          >
+            <Ionicons
+              name="add"
+              size={20}
+              color={theme.colors.tabBarActive}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerActionButton, { borderColor: theme.colors.border }]}
+            onPress={generatePDF}
+          >
+            <Ionicons
+              name="print-outline"
+              size={20}
+              color={theme.colors.tabBarActive}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -521,11 +544,30 @@ const InvestmentsDetailScreen = ({ navigation, route }) => {
             <Text
               style={[
                 styles.emptySubtext,
-                { color: theme.colors.textSecondary },
+                { color: theme.colors.textSecondary, marginBottom: 20 },
               ]}
             >
               Start by adding your first investment
             </Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: theme.colors.tabBarActive,
+                paddingHorizontal: 24,
+                paddingVertical: 14,
+                borderRadius: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+              onPress={() =>
+                navigation.navigate("AddInvestment", { selectedMonth })
+              }
+            >
+              <Ionicons name="add-circle-outline" size={20} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>
+                Add Investment
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -564,14 +606,18 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
   },
-  pdfButton: {
+  headerActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginLeft: 16,
+  },
+  headerActionButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 16,
   },
   scrollContainer: {
     padding: 20,

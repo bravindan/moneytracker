@@ -24,6 +24,7 @@ const budgetsCol = (uid) => collection(db, "users", uid, "budgets");
 const investmentsCol = (uid) => collection(db, "users", uid, "investments");
 const expensesCol = (uid) => collection(db, "users", uid, "expenses");
 const spendingCol = (uid) => collection(db, "users", uid, "spending");
+const walletsCol = (uid) => collection(db, "users", uid, "wallets");
 
 const getMonthKeyFromValue = (value) => {
   if (!value) return null;
@@ -119,6 +120,7 @@ export const deleteAllUserData = async (uid) => {
     investmentsCol(uid),
     expensesCol(uid),
     spendingCol(uid),
+    walletsCol(uid),
   ];
 
   // Delete all documents in each subcollection
@@ -376,8 +378,8 @@ export const getSpendingByCategory = async (uid, category, month) => {
   );
 
   return filteredSpending.sort((a, b) => {
-    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.date);
-    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.date);
+    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || a.date || 0);
+    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || b.date || 0);
     return dateB - dateA;
   });
 };
@@ -453,4 +455,190 @@ export const updateMonthlySummary = (uid, month, updates) =>
  */
 export const deleteMonthlySummary = (uid, month) =>
   deleteDoc(doc(monthlySummariesCol(uid), month));
+
+/**
+ * Delete a monthly record and everything tied to that month:
+ * the summary doc, plus all spending, expenses, and investments
+ * recorded for that month.
+ * @param {string} uid
+ * @param {string} month - Format "YYYY-MM"
+ * @returns {Promise<void>}
+ */
+export const deleteMonthlyRecord = async (uid, month) => {
+  const cols = [
+    spendingCol(uid),
+    expensesCol(uid),
+    investmentsCol(uid),
+  ];
+  // Delete all docs in each collection that belong to this month.
+  await Promise.all(
+    cols.map(async (col) => {
+      const q = query(col, where("month", "==", month));
+      const snap = await getDocs(q);
+      await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+    }),
+  );
+  await deleteDoc(doc(monthlySummariesCol(uid), month));
+};
+
+// ---------------------------------------------------------------------------
+// Wallets (Cash / Mobile Money / Card) and Credit accounts
+// ---------------------------------------------------------------------------
+
+const DEFAULT_WALLETS = [
+  { name: "Cash", type: "asset", isDefault: true },
+  { name: "Mobile Money", type: "asset", isDefault: true },
+];
+
+/**
+ * Create the default asset wallets (Cash / Mobile Money) if they
+ * don't exist. Idempotent — safe to call on every app load.
+ * @param {string} uid
+ * @returns {Promise<void>}
+ */
+export const ensureDefaultWallets = async (uid) => {
+  const snap = await getDocs(walletsCol(uid));
+  const existing = new Set(snap.docs.map((d) => d.data().name));
+  const missing = DEFAULT_WALLETS.filter((w) => !existing.has(w.name));
+  await Promise.all(
+    missing.map((w) =>
+      addDoc(walletsCol(uid), { ...w, createdAt: serverTimestamp() }),
+    ),
+  );
+};
+
+/**
+ * Fetch all wallets for a user.
+ * @param {string} uid
+ * @returns {Promise<object[]>}
+ */
+export const getWallets = async (uid) => {
+  const snap = await getDocs(walletsCol(uid));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
+/**
+ * Fetch only credit-type wallets.
+ * @param {string} uid
+ * @returns {Promise<object[]>}
+ */
+export const getCreditWallets = async (uid) => {
+  const wallets = await getWallets(uid);
+  return wallets.filter((w) => w.type === "credit");
+};
+
+/**
+ * Add a new credit wallet (the built-in asset wallets are fixed).
+ * @param {string} uid
+ * @param {{ name: string, limit: number, description?: string }} data
+ * @returns {Promise<import('firebase/firestore').DocumentReference>}
+ */
+export const addWallet = (uid, data) =>
+  addDoc(walletsCol(uid), {
+    name: data.name,
+    type: "credit",
+    limit: data.limit || 0,
+    used: 0,
+    remaining: data.limit || 0,
+    description: data.description || "",
+    createdAt: serverTimestamp(),
+  });
+
+/**
+ * Update a wallet document.
+ * @param {string} uid
+ * @param {string} walletId
+ * @param {object} updates
+ */
+export const updateWallet = (uid, walletId, updates) =>
+  updateDoc(doc(walletsCol(uid), walletId), updates);
+
+/**
+ * Delete a wallet document.
+ * @param {string} uid
+ * @param {string} walletId
+ */
+export const deleteWallet = (uid, walletId) =>
+  deleteDoc(doc(walletsCol(uid), walletId));
+
+/**
+ * Spend against a credit wallet: increase used, decrease remaining.
+ * @param {string} uid
+ * @param {string} walletId
+ * @param {number} amount
+ */
+export const useCreditAmount = async (uid, walletId, amount) => {
+  const snap = await getDoc(doc(walletsCol(uid), walletId));
+  if (!snap.exists()) throw new Error("Credit wallet not found");
+  const wallet = snap.data();
+  if (wallet.type !== "credit") throw new Error("Not a credit wallet");
+  const newUsed = (wallet.used || 0) + amount;
+  const newRemaining = (wallet.limit || 0) - newUsed;
+  await updateDoc(doc(walletsCol(uid), walletId), {
+    used: newUsed,
+    remaining: Math.max(0, newRemaining),
+  });
+};
+
+/**
+ * Repay a credit wallet: decrease used, increase remaining.
+ * @param {string} uid
+ * @param {string} walletId
+ * @param {number} amount
+ */
+export const repayCredit = async (uid, walletId, amount) => {
+  const snap = await getDoc(doc(walletsCol(uid), walletId));
+  if (!snap.exists()) throw new Error("Credit wallet not found");
+  const wallet = snap.data();
+  if (wallet.type !== "credit") throw new Error("Not a credit wallet");
+  const newUsed = Math.max(0, (wallet.used || 0) - amount);
+  const newRemaining = Math.min(
+    wallet.limit || 0,
+    (wallet.remaining || 0) + amount,
+  );
+  await updateDoc(doc(walletsCol(uid), walletId), {
+    used: newUsed,
+    remaining: newRemaining,
+  });
+};
+
+/**
+ * Delete an expense category and everything tied to it:
+ * - the expense doc itself
+ * - all spending records under that category for the month
+ * - reverts credit usage for any credit-funded spending in that category
+ * @param {string} uid
+ * @param {string} expenseId
+ * @param {string} category - the expense category name
+ * @param {string} month - Format "YYYY-MM"
+ * @returns {Promise<void>}
+ */
+export const deleteExpenseCategory = async (uid, expenseId, category, month) => {
+  // Delete all spending records in this category for the month,
+  // and reverse credit usage for credit-funded ones.
+  const q = query(
+    spendingCol(uid),
+    where("category", "==", category),
+    where("month", "==", month),
+  );
+  const snap = await getDocs(q);
+  await Promise.all(
+    snap.docs.map(async (d) => {
+      const data = d.data();
+      if (data.walletType === "credit" && data.walletId) {
+        try {
+          await repayCredit(uid, data.walletId, data.totalSpending || data.amount || 0);
+        } catch (error) {
+          console.error("Failed to reverse credit usage:", error);
+        }
+      }
+      await deleteDoc(d.ref);
+    }),
+  );
+
+  // Delete the expense category doc itself.
+  if (expenseId) {
+    await deleteDoc(doc(expensesCol(uid), expenseId));
+  }
+};
 

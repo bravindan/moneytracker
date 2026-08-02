@@ -24,6 +24,9 @@ import {
   addSpending,
   getSpending,
   getUserProfile,
+  getWallets,
+  ensureDefaultWallets,
+  useCreditAmount,
 } from "../services/firestoreService";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Print from "expo-print";
@@ -42,6 +45,16 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   useEffect(() => {
     if (!user?.uid) return;
     getUserProfile(user.uid).then(setProfile).catch(() => {});
+    (async () => {
+      try {
+        await ensureDefaultWallets(user.uid);
+        const all = await getWallets(user.uid);
+        setWallets(all);
+        setSelectedWalletId(null);
+      } catch (error) {
+        console.error("Failed to load wallets:", error);
+      }
+    })();
   }, [user?.uid]);
 
   const currencyCode = profile?.currency || "KES";
@@ -76,6 +89,10 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   const [transactionCosts, setTransactionCosts] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerMonthDate, setPickerMonthDate] = useState(new Date());
+  // Wallet selection ("Paid From")
+  const [wallets, setWallets] = useState([]);
+  const [selectedWalletId, setSelectedWalletId] = useState(null);
+  const [showWalletPicker, setShowWalletPicker] = useState(false);
 
   // Load expenses data from database
   const loadExpensesData = useCallback(async () => {
@@ -133,8 +150,11 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
 
   useFocusEffect(
     useCallback(() => {
+      // Refresh both expenses (categories) and spending when returning to
+      // this screen, so newly added categories appear without a manual refresh.
+      loadExpensesData();
       fetchFreshSpending();
-    }, [fetchFreshSpending]),
+    }, [loadExpensesData, fetchFreshSpending]),
   );
 
   const totalAllocated = monthlyData?.expensesAmount || 0;
@@ -153,6 +173,32 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
       0,
     );
   const totalRemaining = totalAllocated - totalSpent;
+
+  // Available balance per wallet for the selected month:
+  // asset: funded (from monthly summary walletFunding) − spent (from all month spending)
+  // credit: remaining
+  const walletBalances = (() => {
+    const fundingMap = {};
+    (monthlyData?.walletFunding || []).forEach((f) => {
+      fundingMap[f.walletId] = f.amount || 0;
+    });
+    const walletIds = new Set(wallets.map((w) => w.id));
+    const spentByWallet = {};
+    (allSpending || []).forEach((s) => {
+      if (!s.walletId || !walletIds.has(s.walletId)) return;
+      spentByWallet[s.walletId] =
+        (spentByWallet[s.walletId] || 0) + (s.totalSpending || s.amount || 0);
+    });
+    const balances = {};
+    (wallets || []).forEach((w) => {
+      if (w.type === "credit") {
+        balances[w.id] = w.remaining || 0;
+      } else {
+        balances[w.id] = (fundingMap[w.id] || 0) - (spentByWallet[w.id] || 0);
+      }
+    });
+    return balances;
+  })();
 
   // Calculate total spending for each category
   const calculateCategorySpent = (category) => {
@@ -174,6 +220,9 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
     setSpendingItemName("");
     setTransactionCosts("");
     setSpendingDate(new Date());
+    setSelectedWalletId(null);
+    // Always ask which account to use.
+    setTimeout(() => setShowWalletPicker(true), 300);
   };
 
   // Calculate the first day of the selected month for date validation
@@ -371,11 +420,26 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
       return;
     }
 
+    const wallet = wallets.find((w) => w.id === selectedWalletId) || null;
+    if (!wallet) {
+      Alert.alert("Required", "Please select where you're paying from.");
+      return;
+    }
+
+    const amount = parseFloat(spendingAmount);
+    const transactionCost = parseFloat(transactionCosts) || 0;
+    const totalSpending = amount + transactionCost;
+
     setSaving(true);
     try {
-      const amount = parseFloat(spendingAmount);
-      const transactionCost = parseFloat(transactionCosts) || 0;
-      const totalSpending = amount + transactionCost;
+      // Track credit usage if paying with a credit account
+      if (wallet.type === "credit") {
+        try {
+          await useCreditAmount(user.uid, wallet.id, totalSpending);
+        } catch (error) {
+          console.error("Failed to update credit usage:", error);
+        }
+      }
 
       await addSpending(user.uid, {
         category: selectedCategory,
@@ -386,6 +450,8 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
         month: selectedMonth,
         transactionCosts: transactionCost,
         totalSpending: totalSpending,
+        walletId: wallet.id,
+        walletType: wallet.type,
       });
 
       // Reload spending so Unallocated funding entries are included
@@ -851,6 +917,37 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
                     { color: theme.colors.textSecondary },
                   ]}
                 >
+                  Paid From:
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.dateInput,
+                    {
+                      backgroundColor: theme.colors.background,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                  onPress={() => setShowWalletPicker(true)}
+                >
+                  <Text style={[styles.dateText, { color: theme.colors.text }]}>
+                    {wallets.find((w) => w.id === selectedWalletId)?.name || "Select account"}
+                  </Text>
+                  <Ionicons
+                    name="chevron-down"
+                    size={16}
+                    color={theme.colors.textSecondary}
+                    style={{ marginLeft: 8 }}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text
+                  style={[
+                    styles.inputLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
                   Date:
                 </Text>
                 <TouchableOpacity
@@ -911,6 +1008,84 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Wallet Picker Modal */}
+      <Modal
+        visible={showWalletPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowWalletPicker(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.5)" }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                Pay From
+              </Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowWalletPicker(false)}
+              >
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody} bounces={false}>
+              {wallets.map((wallet) => {
+                const isSelected = wallet.id === selectedWalletId;
+                return (
+                  <TouchableOpacity
+                    key={wallet.id}
+                    style={[
+                      {
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        paddingVertical: 14,
+                        paddingHorizontal: 12,
+                        borderRadius: 8,
+                        marginBottom: 8,
+                        backgroundColor: isSelected
+                          ? theme.colors.tabBarActive + "15"
+                          : theme.colors.background,
+                      },
+                    ]}
+                    onPress={() => {
+                      setSelectedWalletId(wallet.id);
+                      setShowWalletPicker(false);
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: "600" }}>
+                        {wallet.name}
+                      </Text>
+                      {wallet.type === "credit" ? (
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                          Remaining: {fmt(wallet.remaining || 0)}
+                        </Text>
+                      ) : (
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                          Available: {fmt(walletBalances[wallet.id] || 0)}
+                        </Text>
+                      )}
+                    </View>
+                    {isSelected && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={22}
+                        color={theme.colors.tabBarActive}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
 
       {/* Date Picker Modal */}

@@ -98,7 +98,8 @@ const DashboardHeader = ({
         >
           <Text style={[styles.monthButtonText, { color: "#ffffff" }]}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity
+        {/* Auto-switch toggle is temporarily disabled (see DashboardScreen). */}
+        {/* <TouchableOpacity
           onPress={onToggleAutoMonthSwitch}
           style={{
             flexDirection: "row",
@@ -144,7 +145,7 @@ const DashboardHeader = ({
             }
             style={{ marginLeft: 4 }}
           />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
         {hasRecord && (
           <TouchableOpacity
             style={[styles.recordMenuButton, { borderColor: theme.colors.border }]}
@@ -158,7 +159,8 @@ const DashboardHeader = ({
           </TouchableOpacity>
         )}
       </View>
-      <Text
+      {/* Auto-switch status text is temporarily hidden (toggle disabled). */}
+      {/* <Text
         style={{
           fontSize: 11,
           color: theme.colors.textSecondary,
@@ -169,7 +171,7 @@ const DashboardHeader = ({
         {autoMonthSwitch
           ? "Auto-switch ON — app opens to current month"
           : "Auto-switch OFF — stays on selected month"}
-      </Text>
+      </Text> */}
     </View>
   );
 };
