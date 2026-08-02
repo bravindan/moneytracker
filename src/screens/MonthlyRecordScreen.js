@@ -18,6 +18,8 @@ import {
   setMonthlySummary,
   getMonthlySummary,
   getUserProfile,
+  getWallets,
+  ensureDefaultWallets,
 } from '../services/firestoreService';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -54,6 +56,10 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
     makeAlloc('savingsInvestment', 'Investments'),
     makeAlloc('expenses', 'Expenses'),
   ]);
+
+  // ── Wallet funding: how income is split across Cash / Mobile / Card ──
+  const [walletFunding, setWalletFunding] = useState([]); // [{ id, walletId, name, value, mode }]
+  const [wallets, setWallets] = useState([]); // asset wallets only
 
   const [loading, setLoading] = useState(false);
   const [profile, setProfile] = useState(null);
@@ -132,6 +138,23 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
               ),
             ]);
           }
+
+          // Wallet funding
+          if (Array.isArray(data.walletFunding) && data.walletFunding.length) {
+            setWalletFunding(
+              data.walletFunding.map((f) => ({
+                id: `wf${allocIdRef.current++}`,
+                walletId: f.walletId || '',
+                name: f.name || '',
+                custom: !f.walletId,
+                mode: f.mode || 'percent',
+                value:
+                  (f.mode || 'percent') === 'amount'
+                    ? String(f.amount ?? '')
+                    : String(f.percent ?? ''),
+              })),
+            );
+          }
         }
       } catch (error) {
         console.error('Failed to load monthly record:', error);
@@ -146,6 +169,40 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
 
   // Currency from profile, default to KES
   const currencyCode = profile?.currency || 'KES';
+
+  // Load the default asset wallets for wallet funding (Cash + Mobile Money)
+  useEffect(() => {
+    if (!uid) return;
+    const loadWallets = async () => {
+      try {
+        await ensureDefaultWallets(uid);
+        const all = await getWallets(uid);
+        // Defaults are Cash and Mobile Money; Card is excluded.
+        const defaultWallets = all.filter(
+          (w) => w.type === 'asset' && w.name !== 'Card',
+        );
+        setWallets(defaultWallets);
+        // Seed default funding rows so Cash/Mobile always have inputs.
+        setWalletFunding((prev) => {
+          const existingIds = new Set(prev.map((f) => f.walletId));
+          const missing = defaultWallets
+            .filter((w) => !existingIds.has(w.id))
+            .map((w) => ({
+              id: `wf${allocIdRef.current++}`,
+              walletId: w.id,
+              name: w.name,
+              custom: false,
+              mode: 'percent',
+              value: '',
+            }));
+          return [...prev, ...missing];
+        });
+      } catch (error) {
+        console.error('Failed to load wallets:', error);
+      }
+    };
+    loadWallets();
+  }, [uid]);
 
   const fmt = useMemo(() => {
     return (amount) =>
@@ -229,6 +286,45 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
   const removeAllocation = (id) =>
     setAllocations((prev) => prev.filter((a) => a.id !== id));
 
+  // ── Wallet funding handlers ──
+  const updateWalletFunding = (id, field, value) =>
+    setWalletFunding((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, [field]: value } : f)),
+    );
+
+  const addWalletFunding = () =>
+    setWalletFunding((prev) => [
+      ...prev,
+      {
+        id: `wf${allocIdRef.current++}`,
+        walletId: '',
+        name: '',
+        custom: true,
+        mode: 'percent',
+        value: '',
+      },
+    ]);
+
+  const removeWalletFunding = (id) =>
+    setWalletFunding((prev) => prev.filter((f) => f.id !== id));
+
+  // Computed wallet funding: resolve value to amount (percent of income or fixed)
+  const computedWalletFunding = useMemo(
+    () =>
+      walletFunding.map((f) => {
+        const num = parseFloat(f.value) || 0;
+        if (f.mode === 'amount') {
+          const amount = num;
+          const percent = totalIncome > 0 ? (amount / totalIncome) * 100 : 0;
+          return { ...f, amount, percent };
+        }
+        const percent = num;
+        const amount = (totalIncome * percent) / 100;
+        return { ...f, amount, percent };
+      }),
+    [walletFunding, totalIncome],
+  );
+
   const handleSave = async () => {
     if (!uid) {
       Alert.alert('Error', 'You must be logged in');
@@ -242,13 +338,21 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
       return;
     }
     if (totalAllocated > totalIncome + 0.01) {
+      // Warn but allow (credit/overspend can exceed allocations)
       Alert.alert(
         'Allocations exceed income',
-        `Your allocations (${fmt(totalAllocated)}) are more than your income (${fmt(totalIncome)}). Reduce them to continue.`,
+        `Your allocations (${fmt(totalAllocated)}) are more than your income (${fmt(totalIncome)}). You can save anyway — the shortfall can be covered by credit or other funds.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Save Anyway', onPress: () => saveRecord() },
+        ],
       );
       return;
     }
+    saveRecord();
+  };
 
+  const saveRecord = async () => {
     const cleanedSources = incomeSources
       .filter((s) => (parseFloat(s.amount) || 0) > 0)
       .map((s, index) => ({
@@ -264,6 +368,17 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
       percent: round2(a.percent),
     }));
 
+    const cleanedWalletFunding = computedWalletFunding
+      .filter((f) => (parseFloat(f.value) || 0) > 0)
+      .filter((f) => !f.custom || (f.name && f.name.trim()))
+      .map((f) => ({
+        walletId: f.walletId || null,
+        name: f.name?.trim() || 'Account',
+        mode: f.mode,
+        amount: round2(f.amount),
+        percent: round2(f.percent),
+      }));
+
     const si = computedAllocations.find((a) => a.key === 'savingsInvestment');
     const ex = computedAllocations.find((a) => a.key === 'expenses');
     const siAmount = si?.amount || 0;
@@ -273,6 +388,7 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
       income: totalIncome,
       incomeSources: cleanedSources,
       allocations: cleanedAllocations,
+      walletFunding: cleanedWalletFunding,
       // Legacy fields kept in sync so existing dashboard/report math works
       savingsPercent: 0,
       investmentPercent: siPercent,
@@ -488,6 +604,179 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
               </Text>
             </View>
           ))}
+        </View>
+
+        {/* ── Wallet Funding ── */}
+        <View style={styles.formGroup}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.label, { color: theme.colors.text }]}>Where does the money go?</Text>
+            <TouchableOpacity
+              style={[styles.addButton, { borderColor: theme.colors.tabBarActive }]}
+              onPress={addWalletFunding}
+            >
+              <Ionicons name="add" size={16} color={theme.colors.tabBarActive} />
+              <Text style={[styles.addButtonText, { color: theme.colors.tabBarActive }]}>Add account</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.allocHint, { color: theme.colors.textSecondary, marginBottom: 12 }]}>
+            Split this month's income across your accounts. Cash and Mobile Money are included by default.
+          </Text>
+
+          {/* Default rows: Cash + Mobile Money */}
+          {walletFunding
+            .filter((f) => !f.custom)
+            .map((funding) => (
+              <View
+                key={funding.id}
+                style={[styles.allocCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+              >
+                <View style={styles.allocHeader}>
+                  <Text style={[styles.allocName, { color: theme.colors.text, borderBottomWidth: 0, paddingBottom: 0 }]}>
+                    {funding.name}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => removeWalletFunding(funding.id)}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#dc2626" />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.allocControls}>
+                  <View style={[styles.switcher, { borderColor: theme.colors.border }]}>
+                    <TouchableOpacity
+                      style={[
+                        styles.switcherOption,
+                        funding.mode === 'percent' && { backgroundColor: theme.colors.tabBarActive },
+                      ]}
+                      onPress={() => funding.mode !== 'percent' && updateWalletFunding(funding.id, 'mode', 'percent')}
+                    >
+                      <Text
+                        style={[
+                          styles.switcherText,
+                          { color: funding.mode === 'percent' ? '#ffffff' : theme.colors.textSecondary },
+                        ]}
+                      >
+                        %
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.switcherOption,
+                        funding.mode === 'amount' && { backgroundColor: theme.colors.tabBarActive },
+                      ]}
+                      onPress={() => funding.mode !== 'amount' && updateWalletFunding(funding.id, 'mode', 'amount')}
+                    >
+                      <Text
+                        style={[
+                          styles.switcherText,
+                          { color: funding.mode === 'amount' ? '#ffffff' : theme.colors.textSecondary },
+                        ]}
+                      >
+                        Amount
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TextInput
+                    style={[styles.input, styles.allocValue, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                    placeholder={funding.mode === 'percent' ? 'e.g. 50' : 'e.g. 20000'}
+                    placeholderTextColor={theme.colors.textSecondary}
+                    keyboardType="numeric"
+                    value={funding.value}
+                    onChangeText={(text) => updateWalletFunding(funding.id, 'value', text)}
+                  />
+                </View>
+                {(() => {
+                  const computed = computedWalletFunding.find((f) => f.id === funding.id);
+                  return computed ? (
+                    <Text style={[styles.allocHint, { color: theme.colors.textSecondary }]}>
+                      {funding.mode === 'percent'
+                        ? `= ${fmt(computed.amount)}`
+                        : `= ${round2(computed.percent)}% of income`}
+                    </Text>
+                  ) : null;
+                })()}
+              </View>
+            ))}
+
+          {/* Custom rows the user adds */}
+          {walletFunding
+            .filter((f) => f.custom)
+            .map((funding) => (
+              <View
+                key={funding.id}
+                style={[styles.allocCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+              >
+                <View style={styles.allocHeader}>
+                  <TextInput
+                    style={[styles.allocName, { color: theme.colors.text, borderBottomColor: theme.colors.border }]}
+                    placeholder="Account name (e.g. Card)"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={funding.name}
+                    onChangeText={(text) => updateWalletFunding(funding.id, 'name', text)}
+                  />
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => removeWalletFunding(funding.id)}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#dc2626" />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.allocControls}>
+                  <View style={[styles.switcher, { borderColor: theme.colors.border }]}>
+                    <TouchableOpacity
+                      style={[
+                        styles.switcherOption,
+                        funding.mode === 'percent' && { backgroundColor: theme.colors.tabBarActive },
+                      ]}
+                      onPress={() => funding.mode !== 'percent' && updateWalletFunding(funding.id, 'mode', 'percent')}
+                    >
+                      <Text
+                        style={[
+                          styles.switcherText,
+                          { color: funding.mode === 'percent' ? '#ffffff' : theme.colors.textSecondary },
+                        ]}
+                      >
+                        %
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.switcherOption,
+                        funding.mode === 'amount' && { backgroundColor: theme.colors.tabBarActive },
+                      ]}
+                      onPress={() => funding.mode !== 'amount' && updateWalletFunding(funding.id, 'mode', 'amount')}
+                    >
+                      <Text
+                        style={[
+                          styles.switcherText,
+                          { color: funding.mode === 'amount' ? '#ffffff' : theme.colors.textSecondary },
+                        ]}
+                      >
+                        Amount
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TextInput
+                    style={[styles.input, styles.allocValue, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                    placeholder={funding.mode === 'percent' ? 'e.g. 50' : 'e.g. 20000'}
+                    placeholderTextColor={theme.colors.textSecondary}
+                    keyboardType="numeric"
+                    value={funding.value}
+                    onChangeText={(text) => updateWalletFunding(funding.id, 'value', text)}
+                  />
+                </View>
+                {(() => {
+                  const computed = computedWalletFunding.find((f) => f.id === funding.id);
+                  return computed ? (
+                    <Text style={[styles.allocHint, { color: theme.colors.textSecondary }]}>
+                      {funding.mode === 'percent'
+                        ? `= ${fmt(computed.amount)}`
+                        : `= ${round2(computed.percent)}% of income`}
+                    </Text>
+                  ) : null;
+                })()}
+              </View>
+            ))}
         </View>
 
         {/* ── Summary ── */}

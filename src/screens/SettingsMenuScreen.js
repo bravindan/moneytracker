@@ -91,6 +91,12 @@ const SettingsMenuScreen = ({ navigation }) => {
       disabled: !biometricAvailable,
     },
     {
+      title: 'Accounts',
+      subtitle: 'Cash, mobile money, cards, and credit',
+      icon: 'wallet-outline',
+      screen: 'Wallets',
+    },
+    {
       title: 'Currency',
       subtitle: 'Select your preferred currency',
       icon: 'cash-outline',

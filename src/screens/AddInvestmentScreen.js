@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import IOSSpinner from "../components/IOSSpinner";
 import { useTheme } from "../contexts/ThemeContext";
 import { getCurrentUser } from "../services/authService";
 import {
@@ -146,6 +147,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
 
     setLoading(true);
     try {
+      if (!uid) throw new Error("User not authenticated");
       if (editingId) {
         await updateInvestment(uid, editingId, {
           category: category.trim(),
@@ -169,15 +171,21 @@ const AddInvestmentScreen = ({ navigation, route }) => {
         });
         Alert.alert("Success", "Investment added successfully!");
       }
-
-      resetForm();
-      await loadInvestments();
-      await loadMonthlyData();
     } catch (error) {
       console.error("Failed to save investment:", error);
       Alert.alert("Error", "Failed to save investment");
     } finally {
       setLoading(false);
+    }
+
+    // Refresh the list and allocation totals after a successful save.
+    // Kept outside the try/catch so a refresh failure never masks a
+    // successful save with an error alert.
+    try {
+      resetForm();
+      await Promise.all([loadInvestments(), loadMonthlyData()]);
+    } catch (error) {
+      console.error("Failed to refresh investments after save:", error);
     }
   };
 

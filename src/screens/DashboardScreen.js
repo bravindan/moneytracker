@@ -10,7 +10,6 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  AppState,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -26,9 +25,11 @@ import {
   getSpending,
   getInvestments,
   getExpenses,
-  deleteMonthlySummary,
+  deleteMonthlyRecord,
   addSpending,
-  updateUserProfile,
+  getWallets,
+  ensureDefaultWallets,
+  useCreditAmount,
 } from "../services/firestoreService";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
@@ -347,6 +348,7 @@ export default function DashboardScreen({ navigation }) {
   const [showOtherAllocations, setShowOtherAllocations] = useState(false);
   const [allSpending, setAllSpending] = useState([]);
   const [investments, setInvestments] = useState([]);
+  const [wallets, setWallets] = useState([]);
   const [showRecordMenu, setShowRecordMenu] = useState(false);
 
   // Auto month switch
@@ -360,6 +362,8 @@ export default function DashboardScreen({ navigation }) {
   const [unallocatedDesc, setUnallocatedDesc] = useState("");
   const [unallocatedDate, setUnallocatedDate] = useState(new Date());
   const [savingUnallocated, setSavingUnallocated] = useState(false);
+  const [unallocatedWalletId, setUnallocatedWalletId] = useState(null);
+  const [showUnallocatedWalletPicker, setShowUnallocatedWalletPicker] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     if (!uid) return;
@@ -377,12 +381,16 @@ export default function DashboardScreen({ navigation }) {
   const fetchMonthlyData = useCallback(async () => {
     if (!uid) return;
     try {
-      const [data, spendingData, invData, expensesData] =
+      const [data, spendingData, invData, expensesData, walletData] =
         await Promise.all([
           getMonthlySummary(uid, selectedMonth),
           getSpending(uid, selectedMonth),
           getInvestments(uid, selectedMonth),
           getExpenses(uid, selectedMonth),
+          (async () => {
+            await ensureDefaultWallets(uid);
+            return getWallets(uid);
+          })(),
         ]);
 
       if (data) {
@@ -393,11 +401,13 @@ export default function DashboardScreen({ navigation }) {
 
       setAllSpending(spendingData || []);
       setInvestments(invData || []);
+      setWallets(walletData || []);
     } catch (error) {
       console.error("Failed to fetch monthly data:", error);
       setMonthlyData(null);
       setAllSpending([]);
       setInvestments([]);
+      setWallets([]);
     } finally {
       setLoading(false);
     }
@@ -415,28 +425,29 @@ export default function DashboardScreen({ navigation }) {
     }, [fetchProfile, fetchMonthlyData]),
   );
 
-  // Auto-switch to current month when toggle is ON.
-  // Re-checks on mount, when the toggle changes, and when the app
-  // resumes from the background (e.g. relaunched after a month boundary).
-  useEffect(() => {
-    const snapToCurrentMonth = () => {
-      if (autoMonthSwitch) {
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        setSelectedMonth((prev) => {
-          if (prev !== currentMonth) setLoading(true);
-          return currentMonth;
-        });
-      }
-    };
+  // Auto-switch to current month is TEMPORARILY DISABLED.
+  // The toggle is hidden in DashboardHeader; this effect and the toggle
+  // handler are commented out so the selected month stays stable. Re-enable
+  // when the auto-switch behavior is implemented properly.
+  // useEffect(() => {
+  //   const snapToCurrentMonth = () => {
+  //     if (autoMonthSwitch) {
+  //       const currentMonth = new Date().toISOString().slice(0, 7);
+  //       setSelectedMonth((prev) => {
+  //         if (prev !== currentMonth) setLoading(true);
+  //         return currentMonth;
+  //       });
+  //     }
+  //   };
 
-    snapToCurrentMonth();
+  //   snapToCurrentMonth();
 
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") snapToCurrentMonth();
-    });
+  //   const sub = AppState.addEventListener("change", (state) => {
+  //     if (state === "active") snapToCurrentMonth();
+  //   });
 
-    return () => sub.remove();
-  }, [autoMonthSwitch]);
+  //   return () => sub.remove();
+  // }, [autoMonthSwitch]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -536,16 +547,18 @@ export default function DashboardScreen({ navigation }) {
     setLoading(true);
   };
 
+  // Auto-switch toggle handler is TEMPORARILY DISABLED (toggle hidden).
+  // Kept as a no-op so the DashboardHeader prop contract stays intact.
   const toggleAutoMonthSwitch = async () => {
-    const newValue = !autoMonthSwitch;
-    setAutoMonthSwitch(newValue);
-    if (uid) {
-      try {
-        await updateUserProfile(uid, { autoMonthSwitch: newValue });
-      } catch (e) {
-        console.error("Failed to save setting:", e);
-      }
-    }
+    // const newValue = !autoMonthSwitch;
+    // setAutoMonthSwitch(newValue);
+    // if (uid) {
+    //   try {
+    //     await updateUserProfile(uid, { autoMonthSwitch: newValue });
+    //   } catch (e) {
+    //     console.error("Failed to save setting:", e);
+    //   }
+    // }
   };
 
   const handleEditRecord = () => {
@@ -560,7 +573,7 @@ export default function DashboardScreen({ navigation }) {
     setShowRecordMenu(false);
     Alert.alert(
       "Delete Monthly Record",
-      `Delete the record for ${formatMonthName(selectedMonth)}? This removes the income and allocation for this month. Recorded expenses and investments are not deleted.`,
+      `Delete the record for ${formatMonthName(selectedMonth)}? This removes the income, allocations, and ALL spending, expenses, and investments recorded for this month.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -569,7 +582,7 @@ export default function DashboardScreen({ navigation }) {
           onPress: async () => {
             if (!uid) return;
             try {
-              await deleteMonthlySummary(uid, selectedMonth);
+              await deleteMonthlyRecord(uid, selectedMonth);
               await fetchMonthlyData();
               Alert.alert("Deleted", "Monthly record deleted.");
             } catch (error) {
@@ -608,9 +621,34 @@ export default function DashboardScreen({ navigation }) {
       return;
     }
     const txnCostNum = parseFloat(unallocatedTxnCost) || 0;
-    if (amountNum > financialData.balance) {
-      Alert.alert("Insufficient", "Amount exceeds available balance.");
+    const total = amountNum + txnCostNum;
+    const wallet = wallets.find((w) => w.id === unallocatedWalletId) || null;
+    if (!wallet) {
+      Alert.alert("Required", "Please select where you're paying from.");
       return;
+    }
+    // Warn but allow overspend (can be covered by credit or other funds)
+    if (amountNum > financialData.balance) {
+      Alert.alert(
+        "Exceeds Available Balance",
+        `This amount (${fmt(total)}) is more than your available balance (${fmt(financialData.balance)}). You can record it anyway — the shortfall can be covered by credit or other funds.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Record Anyway", onPress: () => saveUnallocated(wallet, amountNum, txnCostNum, total) },
+        ],
+      );
+      return;
+    }
+    saveUnallocated(wallet, amountNum, txnCostNum, total);
+  };
+
+  const saveUnallocated = async (wallet, amountNum, txnCostNum, total) => {
+    if (wallet.type === "credit") {
+      try {
+        await useCreditAmount(uid, wallet.id, total);
+      } catch (error) {
+        console.error("Failed to update credit usage:", error);
+      }
     }
     setSavingUnallocated(true);
     try {
@@ -619,9 +657,11 @@ export default function DashboardScreen({ navigation }) {
         category: "Unallocated",
         amount: amountNum,
         transactionCosts: txnCostNum,
-        totalSpending: amountNum + txnCostNum,
+        totalSpending: total,
         description: unallocatedDesc.trim(),
         date: unallocatedDate,
+        walletId: wallet.id,
+        walletType: wallet.type,
       });
       setShowUnallocatedModal(false);
       setUnallocatedItem("");
@@ -805,19 +845,34 @@ export default function DashboardScreen({ navigation }) {
                   Income for {formatMonthName(selectedMonth)}
                 </Text>
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.cardToggle,
-                  { borderColor: theme.colors.border },
-                ]}
-                onPress={() => setShowIncomeAmount(!showIncomeAmount)}
-              >
-                <Ionicons
-                  name={showIncomeAmount ? "eye-off-outline" : "eye-outline"}
-                  size={16}
-                  color={theme.colors.tabBarActive}
-                />
-              </TouchableOpacity>
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    { borderColor: theme.colors.border },
+                  ]}
+                  onPress={() => navigation.navigate("Wallets", { selectedMonth })}
+                >
+                  <Ionicons
+                    name="wallet-outline"
+                    size={16}
+                    color={theme.colors.tabBarActive}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.cardToggle,
+                    { borderColor: theme.colors.border },
+                  ]}
+                  onPress={() => setShowIncomeAmount(!showIncomeAmount)}
+                >
+                  <Ionicons
+                    name={showIncomeAmount ? "eye-off-outline" : "eye-outline"}
+                    size={16}
+                    color={theme.colors.tabBarActive}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
             <Text
               style={[styles.cardValue, { color: "#10b981" }]}
@@ -1386,7 +1441,12 @@ export default function DashboardScreen({ navigation }) {
                     styles.actionButton,
                     { borderColor: theme.colors.border },
                   ]}
-                  onPress={() => setShowUnallocatedModal(true)}
+                  onPress={() => {
+                    setUnallocatedWalletId(
+                      wallets.find((w) => w.type === "asset")?.id || null,
+                    );
+                    setShowUnallocatedModal(true);
+                  }}
                 >
                   <Ionicons
                     name="add-outline"
@@ -1667,6 +1727,18 @@ export default function DashboardScreen({ navigation }) {
                 </View>
               </View>
               <View style={{ marginBottom: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Paid From</Text>
+                <TouchableOpacity
+                  style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, backgroundColor: theme.colors.background, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+                  onPress={() => setShowUnallocatedWalletPicker(true)}
+                >
+                  <Text style={{ color: theme.colors.text, fontSize: 14 }}>
+                    {wallets.find((w) => w.id === unallocatedWalletId)?.name || "Select account"}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <View style={{ marginBottom: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.textSecondary, marginBottom: 6 }}>Date</Text>
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   <TouchableOpacity
@@ -1732,6 +1804,58 @@ export default function DashboardScreen({ navigation }) {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Unallocated Wallet Picker Modal */}
+      <Modal
+        visible={showUnallocatedWalletPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowUnallocatedWalletPicker(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <View style={{ backgroundColor: theme.colors.card, borderRadius: 16, padding: 16, width: "100%", maxWidth: 360 }}>
+            <Text style={{ fontSize: 18, fontWeight: "bold", color: theme.colors.text, marginBottom: 16, textAlign: "center" }}>
+              Pay From
+            </Text>
+            {wallets.map((wallet) => {
+              const isSelected = wallet.id === unallocatedWalletId;
+              return (
+                <TouchableOpacity
+                  key={wallet.id}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingVertical: 14,
+                    paddingHorizontal: 12,
+                    borderRadius: 8,
+                    marginBottom: 8,
+                    backgroundColor: isSelected ? theme.colors.tabBarActive + "15" : theme.colors.background,
+                  }}
+                  onPress={() => {
+                    setUnallocatedWalletId(wallet.id);
+                    setShowUnallocatedWalletPicker(false);
+                  }}
+                >
+                  <View>
+                    <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: "600" }}>
+                      {wallet.name}
+                    </Text>
+                    {wallet.type === "credit" && (
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                        Remaining: {fmt(wallet.remaining || 0)}
+                      </Text>
+                    )}
+                  </View>
+                  {isSelected && (
+                    <Ionicons name="checkmark-circle" size={22} color={theme.colors.tabBarActive} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
       </Modal>
     </View>
   );

@@ -21,7 +21,7 @@ import {
   getExpenses,
   getMonthlySummary,
   updateExpense,
-  deleteExpense,
+  deleteExpenseCategory,
   getUserProfile,
 } from "../services/firestoreService";
 import IOSSpinner from "../components/IOSSpinner";
@@ -164,6 +164,18 @@ const AddExpenseScreen = ({ navigation, route }) => {
       : "0";
   };
 
+  // Remaining allocation: total expense budget minus what's already
+  // allocated to other categories (excludes the row being edited so the
+  // balance updates live as the user types a new/updated amount).
+  const calculateRemainingBalance = (expenseAmount) => {
+    const currentExpensesTotal = expenses.reduce((sum, expense) => {
+      if (editingId === expense.id) return sum;
+      return sum + expense.amount;
+    }, 0);
+    const newAmount = parseFloat(expenseAmount) || 0;
+    return allocatedAmount - currentExpensesTotal - newAmount;
+  };
+
   // Clear form
   const clearForm = () => {
     setCategory("");
@@ -225,11 +237,11 @@ const AddExpenseScreen = ({ navigation, route }) => {
     setEditingId(expense.id);
   };
 
-  // Delete expense
-  const handleDeleteExpense = (id) => {
+  // Delete expense category (cascades: removes spending under it + reverts balances)
+  const handleDeleteExpense = (id, categoryName) => {
     Alert.alert(
-      "Delete Expense",
-      "Are you sure you want to delete this expense?",
+      "Delete Expense Category",
+      `Delete "${categoryName}"? This also removes all spending recorded under it and restores the account balances used to pay.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -237,12 +249,12 @@ const AddExpenseScreen = ({ navigation, route }) => {
           style: "destructive",
           onPress: async () => {
             try {
-              await deleteExpense(user.uid, id);
+              await deleteExpenseCategory(user.uid, id, categoryName, selectedMonth);
               setExpenses(expenses.filter((expense) => expense.id !== id));
               if (editingId === id) {
                 clearForm();
               }
-              Alert.alert("Success", "Expense deleted successfully!");
+              Alert.alert("Success", "Expense category deleted.");
             } catch (error) {
               console.error("Error deleting expense:", error);
               Alert.alert("Error", "Failed to delete expense");
@@ -298,7 +310,7 @@ const AddExpenseScreen = ({ navigation, route }) => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionButton, { borderColor: theme.colors.border }]}
-            onPress={() => handleDeleteExpense(expense.id)}
+            onPress={() => handleDeleteExpense(expense.id, expense.category)}
           >
             <Ionicons name="trash-outline" size={16} color="#ef4444" />
           </TouchableOpacity>
@@ -375,22 +387,58 @@ const AddExpenseScreen = ({ navigation, route }) => {
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.allocatedAmountLabel,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Expense Allocation
-                </Text>
-                <Text
-                  style={[
-                    styles.allocatedAmountValue,
-                    { color: theme.colors.text },
-                  ]}
-                >
-                  {fmt(allocatedAmount)}
-                </Text>
+                <View style={{ flex: 1, alignItems: "center" }}>
+                  <Text
+                    style={[
+                      styles.allocatedAmountLabel,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Expense Allocation
+                  </Text>
+                  <Text
+                    style={[
+                      styles.allocatedAmountValue,
+                      { color: theme.colors.text },
+                    ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {fmt(allocatedAmount)}
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    width: 1,
+                    backgroundColor: theme.colors.border,
+                    marginVertical: 4,
+                  }}
+                />
+                <View style={{ flex: 1, alignItems: "center" }}>
+                  <Text
+                    style={[
+                      styles.allocatedAmountLabel,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Balance
+                  </Text>
+                  <Text
+                    style={[
+                      styles.allocatedAmountValue,
+                      {
+                        color:
+                          calculateRemainingBalance(amount) >= 0
+                            ? "#10b981"
+                            : "#ef4444",
+                      },
+                    ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {fmt(Math.max(calculateRemainingBalance(amount), 0))}
+                  </Text>
+                </View>
               </View>
 
               <Text style={[styles.formTitle, { color: theme.colors.text }]}>
@@ -507,11 +555,28 @@ const AddExpenseScreen = ({ navigation, route }) => {
                   >
                     Your Expenses ({expenses.length})
                   </Text>
-                  <Text
-                    style={[styles.totalAmount, { color: theme.colors.text }]}
-                  >
-                    Total: {fmt(expenses.reduce((sum, expense) => sum + expense.amount, 0))}
-                  </Text>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text
+                      style={[styles.totalAmount, { color: theme.colors.text }]}
+                    >
+                      Total: {fmt(expenses.reduce((sum, expense) => sum + expense.amount, 0))}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.allocatedAmountLabel,
+                        {
+                          color:
+                            allocatedAmount -
+                              expenses.reduce((sum, expense) => sum + expense.amount, 0) >=
+                            0
+                              ? "#10b981"
+                              : "#ef4444",
+                        },
+                      ]}
+                    >
+                      Balance: {fmt(Math.max(allocatedAmount - expenses.reduce((sum, expense) => sum + expense.amount, 0), 0))}
+                    </Text>
+                  </View>
                 </View>
 
                 <FlatList
