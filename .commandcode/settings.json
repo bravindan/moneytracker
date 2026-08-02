@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(node --check src/screens/DashboardScreen.js)",
+      "Shell(npx expo export --platform android --output-dir /tmp/commandcode-1000/-home-brav-Dev-moneytracker/c5df60a1-b668-49f1-9c80-06a650d243cd/scratchpad/expo-export-check 2 >& 1)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}
