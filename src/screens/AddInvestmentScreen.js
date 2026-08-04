@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,6 +26,9 @@ import {
   getMonthlySummary,
   getSpending,
   getUserProfile,
+  getWallets,
+  ensureDefaultWallets,
+  useCreditAmount,
 } from "../services/firestoreService";
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -45,6 +49,12 @@ const AddInvestmentScreen = ({ navigation, route }) => {
     route?.params?.selectedMonth || getCurrentMonth(),
   ); // YYYY-MM format;
   const [allocatedAmount, setAllocatedAmount] = useState(0);
+  // Wallet selection ("Paid From")
+  const [wallets, setWallets] = useState([]);
+  const [selectedWalletId, setSelectedWalletId] = useState(null);
+  const [showWalletPicker, setShowWalletPicker] = useState(false);
+  const [monthlySummary, setMonthlySummary] = useState(null);
+  const [monthSpending, setMonthSpending] = useState([]);
 
   const user = getCurrentUser();
   const uid = user?.uid;
@@ -54,6 +64,15 @@ const AddInvestmentScreen = ({ navigation, route }) => {
   useEffect(() => {
     if (!uid) return;
     getUserProfile(uid).then(setProfile).catch(() => {});
+    (async () => {
+      try {
+        await ensureDefaultWallets(uid);
+        const all = await getWallets(uid);
+        setWallets(all || []);
+      } catch (error) {
+        console.error("Failed to load wallets:", error);
+      }
+    })();
   }, [uid]);
 
   const currencyCode = profile?.currency || "KES";
@@ -69,6 +88,33 @@ const AddInvestmentScreen = ({ navigation, route }) => {
 
   const [pendingBalance, setPendingBalance] = useState(0);
 
+  // Available balance per wallet for the selected month:
+  // asset: funded (from monthly summary walletFunding) − spent (from month spending)
+  // credit: remaining
+  const walletBalances = (() => {
+    const walletList = wallets || [];
+    const fundingMap = {};
+    (monthlySummary?.walletFunding || []).forEach((f) => {
+      fundingMap[f.walletId] = f.amount || 0;
+    });
+    const walletIds = new Set(walletList.map((w) => w.id));
+    const spentByWallet = {};
+    (monthSpending || []).forEach((s) => {
+      if (!s.walletId || !walletIds.has(s.walletId)) return;
+      spentByWallet[s.walletId] =
+        (spentByWallet[s.walletId] || 0) + (s.totalSpending || s.amount || 0);
+    });
+    const balances = {};
+    walletList.forEach((w) => {
+      if (w.type === "credit") {
+        balances[w.id] = w.remaining || 0;
+      } else {
+        balances[w.id] = (fundingMap[w.id] || 0) - (spentByWallet[w.id] || 0);
+      }
+    });
+    return balances;
+  })();
+
   // Load investments data from database
   useEffect(() => {
     if (uid) {
@@ -80,6 +126,10 @@ const AddInvestmentScreen = ({ navigation, route }) => {
   const loadMonthlyData = async () => {
     try {
       const monthlyData = await getMonthlySummary(uid, selectedMonth);
+      const spending = await getSpending(uid, selectedMonth);
+
+      setMonthlySummary(monthlyData || null);
+      setMonthSpending(spending || []);
 
       const income = monthlyData?.income || 0;
       const expensesAmount = monthlyData?.expensesAmount || 0;
@@ -124,6 +174,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
     setTransactionCosts("");
     setDescription("");
     setCategory("");
+    setSelectedWalletId(null);
     setEditingId(null);
   };
 
@@ -145,9 +196,52 @@ const AddInvestmentScreen = ({ navigation, route }) => {
       return;
     }
 
+    const wallet = (wallets || []).find((w) => w.id === selectedWalletId) || null;
+    if (!wallet) {
+      Alert.alert("Required", "Please select the account you're investing from.");
+      return;
+    }
+
+    const total = amountNum + transactionCostNum;
+    // Warn but allow: exceeding an asset wallet's available balance.
+    if (wallet.type === "asset" && !editingId && total > (walletBalances[wallet.id] || 0)) {
+      Alert.alert(
+        "Insufficient Balance",
+        `This investment (${fmt(total)}) is more than your ${wallet.name} available balance (${fmt(walletBalances[wallet.id] || 0)}). You can still record it, but the balance will go negative.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Record Anyway", onPress: () => saveInvestment(wallet, amountNum, transactionCostNum) },
+        ],
+      );
+      return;
+    }
+    // Warn if a credit wallet would exceed its remaining limit.
+    if (wallet.type === "credit" && !editingId && total > (wallet.remaining || 0)) {
+      Alert.alert(
+        "Exceeds Credit Limit",
+        `This investment (${fmt(total)}) is more than your remaining credit (${fmt(wallet.remaining || 0)}). You can still record it, but you'll exceed the limit.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Record Anyway", onPress: () => saveInvestment(wallet, amountNum, transactionCostNum) },
+        ],
+      );
+      return;
+    }
+    saveInvestment(wallet, amountNum, transactionCostNum);
+  };
+
+  const saveInvestment = async (wallet, amountNum, transactionCostNum) => {
     setLoading(true);
     try {
       if (!uid) throw new Error("User not authenticated");
+      // Reduce credit wallet usage if investing from a credit account
+      if (wallet.type === "credit" && !editingId) {
+        try {
+          await useCreditAmount(uid, wallet.id, amountNum + transactionCostNum);
+        } catch (error) {
+          console.error("Failed to update credit usage:", error);
+        }
+      }
       if (editingId) {
         await updateInvestment(uid, editingId, {
           category: category.trim(),
@@ -157,6 +251,8 @@ const AddInvestmentScreen = ({ navigation, route }) => {
           totalInvestment: amountNum + transactionCostNum,
           description: description.trim(),
           month: selectedMonth,
+          walletId: wallet.id,
+          walletType: wallet.type,
         });
         Alert.alert("Success", "Investment updated successfully!");
       } else {
@@ -168,6 +264,8 @@ const AddInvestmentScreen = ({ navigation, route }) => {
           totalInvestment: amountNum + transactionCostNum,
           description: description.trim(),
           month: selectedMonth,
+          walletId: wallet.id,
+          walletType: wallet.type,
         });
         Alert.alert("Success", "Investment added successfully!");
       }
@@ -195,6 +293,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
     setAmount(investment.amount.toString());
     setTransactionCosts((investment.transactionCosts || 0).toString());
     setDescription(investment.description || "");
+    setSelectedWalletId(investment.walletId || null);
     setEditingId(investment.id);
   };
 
@@ -581,6 +680,36 @@ const AddInvestmentScreen = ({ navigation, route }) => {
               <Text
                 style={[styles.label, { color: theme.colors.textSecondary }]}
               >
+                Paid From:
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.colors.background,
+                    borderColor: theme.colors.border,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  },
+                ]}
+                onPress={() => setShowWalletPicker(true)}
+              >
+                <Text style={{ color: theme.colors.text }}>
+                  {(wallets || []).find((w) => w.id === selectedWalletId)?.name || "Select account"}
+                </Text>
+                <Ionicons
+                  name="chevron-down"
+                  size={16}
+                  color={theme.colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text
+                style={[styles.label, { color: theme.colors.textSecondary }]}
+              >
                 Description
               </Text>
               <TextInput
@@ -663,6 +792,113 @@ const AddInvestmentScreen = ({ navigation, route }) => {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Wallet Picker Modal */}
+      <Modal
+        visible={showWalletPicker}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowWalletPicker(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme.colors.card,
+              marginHorizontal: 20,
+              borderRadius: 16,
+              overflow: "hidden",
+              elevation: 5,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 4,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderBottomColor: theme.colors.border,
+                borderBottomWidth: 1,
+                padding: 16,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "bold",
+                  color: theme.colors.text,
+                }}
+              >
+                Invest From
+              </Text>
+              <TouchableOpacity onPress={() => setShowWalletPicker(false)}>
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 320 }} bounces={false}>
+              {(wallets || []).map((wallet) => {
+                const isSelected = wallet.id === selectedWalletId;
+                return (
+                  <TouchableOpacity
+                    key={wallet.id}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: 16,
+                      borderBottomColor: theme.colors.border,
+                      borderBottomWidth: 1,
+                      backgroundColor: isSelected
+                        ? theme.colors.tabBarActive + "15"
+                        : theme.colors.card,
+                    }}
+                    onPress={() => {
+                      setSelectedWalletId(wallet.id);
+                      setShowWalletPicker(false);
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{ color: theme.colors.text, fontSize: 16, fontWeight: "600" }}
+                      >
+                        {wallet.name}
+                      </Text>
+                      {wallet.type === "credit" ? (
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                          Remaining: {fmt(wallet.remaining || 0)}
+                        </Text>
+                      ) : (
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                          Available: {fmt(walletBalances[wallet.id] || 0)}
+                        </Text>
+                      )}
+                    </View>
+                    {isSelected && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={22}
+                        color={theme.colors.tabBarActive}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

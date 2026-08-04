@@ -221,8 +221,6 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
     setTransactionCosts("");
     setSpendingDate(new Date());
     setSelectedWalletId(null);
-    // Always ask which account to use.
-    setTimeout(() => setShowWalletPicker(true), 300);
   };
 
   // Calculate the first day of the selected month for date validation

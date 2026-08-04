@@ -183,19 +183,18 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
         );
         setWallets(defaultWallets);
         // Seed default funding rows so Cash/Mobile always have inputs.
+        // In edit mode the saved record's walletFunding is authoritative,
+        // so only seed when there's no saved funding yet.
         setWalletFunding((prev) => {
-          const existingIds = new Set(prev.map((f) => f.walletId));
-          const missing = defaultWallets
-            .filter((w) => !existingIds.has(w.id))
-            .map((w) => ({
-              id: `wf${allocIdRef.current++}`,
-              walletId: w.id,
-              name: w.name,
-              custom: false,
-              mode: 'percent',
-              value: '',
-            }));
-          return [...prev, ...missing];
+          if (prev.length > 0) return prev;
+          return defaultWallets.map((w) => ({
+            id: `wf${allocIdRef.current++}`,
+            walletId: w.id,
+            name: w.name,
+            custom: false,
+            mode: 'percent',
+            value: '',
+          }));
         });
       } catch (error) {
         console.error('Failed to load wallets:', error);
@@ -307,6 +306,22 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
 
   const removeWalletFunding = (id) =>
     setWalletFunding((prev) => prev.filter((f) => f.id !== id));
+
+  // Toggle between percent/amount for wallet funding, converting the current
+  // value so the effective amount stays the same (mirrors allocations).
+  const toggleWalletFundingMode = (id) =>
+    setWalletFunding((prev) =>
+      prev.map((f) => {
+        if (f.id !== id) return f;
+        const num = parseFloat(f.value) || 0;
+        if (f.mode === 'percent') {
+          const amount = (totalIncome * num) / 100;
+          return { ...f, mode: 'amount', value: num ? String(round2(amount)) : '' };
+        }
+        const percent = totalIncome > 0 ? (num / totalIncome) * 100 : 0;
+        return { ...f, mode: 'percent', value: num ? String(round2(percent)) : '' };
+      }),
+    );
 
   // Computed wallet funding: resolve value to amount (percent of income or fixed)
   const computedWalletFunding = useMemo(
@@ -648,7 +663,7 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
                         styles.switcherOption,
                         funding.mode === 'percent' && { backgroundColor: theme.colors.tabBarActive },
                       ]}
-                      onPress={() => funding.mode !== 'percent' && updateWalletFunding(funding.id, 'mode', 'percent')}
+                      onPress={() => funding.mode !== 'percent' && toggleWalletFundingMode(funding.id)}
                     >
                       <Text
                         style={[
@@ -664,7 +679,7 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
                         styles.switcherOption,
                         funding.mode === 'amount' && { backgroundColor: theme.colors.tabBarActive },
                       ]}
-                      onPress={() => funding.mode !== 'amount' && updateWalletFunding(funding.id, 'mode', 'amount')}
+                      onPress={() => funding.mode !== 'amount' && toggleWalletFundingMode(funding.id)}
                     >
                       <Text
                         style={[
@@ -728,7 +743,7 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
                         styles.switcherOption,
                         funding.mode === 'percent' && { backgroundColor: theme.colors.tabBarActive },
                       ]}
-                      onPress={() => funding.mode !== 'percent' && updateWalletFunding(funding.id, 'mode', 'percent')}
+                      onPress={() => funding.mode !== 'percent' && toggleWalletFundingMode(funding.id)}
                     >
                       <Text
                         style={[
@@ -744,7 +759,7 @@ const MonthlyRecordScreen = ({ navigation, route }) => {
                         styles.switcherOption,
                         funding.mode === 'amount' && { backgroundColor: theme.colors.tabBarActive },
                       ]}
-                      onPress={() => funding.mode !== 'amount' && updateWalletFunding(funding.id, 'mode', 'amount')}
+                      onPress={() => funding.mode !== 'amount' && toggleWalletFundingMode(funding.id)}
                     >
                       <Text
                         style={[

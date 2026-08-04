@@ -23,7 +23,9 @@ import {
   deleteWallet,
   repayCredit,
   getMonthlySummary,
+  updateMonthlySummary,
   getSpending,
+  getInvestments,
   getUserProfile,
 } from "../services/firestoreService";
 import { useFocusEffect } from "@react-navigation/native";
@@ -35,14 +37,23 @@ const WalletsScreen = ({ navigation, route }) => {
   const uid = user?.uid;
   const selectedMonth = route?.params?.selectedMonth || new Date().toISOString().slice(0, 7);
 
+  const walletButtonRefs = React.useRef({}).current;
+
   const [wallets, setWallets] = useState([]);
   const [profile, setProfile] = useState(null);
   const [monthlySummary, setMonthlySummary] = useState(null);
   const [monthSpending, setMonthSpending] = useState([]);
+  const [monthInvestments, setMonthInvestments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRepayModal, setShowRepayModal] = useState(false);
+  const [menuWalletId, setMenuWalletId] = useState(null);
+  const [menuPositionY, setMenuPositionY] = useState(0);
   const [repayWallet, setRepayWallet] = useState(null);
+  const [transferFrom, setTransferFrom] = useState(null);
+  const [transferToId, setTransferToId] = useState(null);
+  const [transferAmount, setTransferAmount] = useState("");
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [newName, setNewName] = useState("");
   const [newLimit, setNewLimit] = useState("");
   const [repayAmount, setRepayAmount] = useState("");
@@ -52,16 +63,18 @@ const WalletsScreen = ({ navigation, route }) => {
     if (!uid) return;
     try {
       await ensureDefaultWallets(uid);
-      const [all, prof, summary, spending] = await Promise.all([
+      const [all, prof, summary, spending, investments] = await Promise.all([
         getWallets(uid),
         getUserProfile(uid),
         getMonthlySummary(uid, selectedMonth),
         getSpending(uid, selectedMonth),
+        getInvestments(uid, selectedMonth),
       ]);
       setWallets(all);
       setProfile(prof);
       setMonthlySummary(summary);
       setMonthSpending(spending || []);
+      setMonthInvestments(investments || []);
     } catch (error) {
       console.error("Failed to load wallets:", error);
     } finally {
@@ -147,6 +160,88 @@ const WalletsScreen = ({ navigation, route }) => {
     );
   };
 
+  const openTransfer = (wallet) => {
+    setTransferFrom(wallet);
+    setTransferToId(null);
+    setTransferAmount("");
+    setShowTransferModal(true);
+  };
+
+  const handleTransfer = async () => {
+    if (!transferFrom || !transferToId) {
+      Alert.alert("Required", "Please select the account to transfer to.");
+      return;
+    }
+    const amount = parseFloat(transferAmount);
+    if (!amount || amount <= 0) {
+      Alert.alert("Required", "Please enter a valid amount.");
+      return;
+    }
+    const fromStats = walletStats[transferFrom.id] || { balance: 0 };
+    if (amount > fromStats.balance) {
+      Alert.alert(
+        "Insufficient Balance",
+        `You can't transfer ${fmt(amount)} — ${transferFrom.name} only has ${fmt(fromStats.balance)}.`,
+      );
+      return;
+    }
+    const toWallet = (wallets || []).find((w) => w.id === transferToId);
+    if (!toWallet) return;
+
+    setSaving(true);
+    try {
+      // Adjust the funded amounts of both wallets in the monthly record,
+      // and recompute each entry's percentage relative to monthly income so
+      // the record screen's wallet funding shows matching figures.
+      const income = monthlySummary?.income || 0;
+      const existingFunding = Array.isArray(monthlySummary?.walletFunding)
+        ? monthlySummary.walletFunding
+        : [];
+      const getEntry = (walletId) =>
+        existingFunding.find((f) => f.walletId === walletId) || {
+          walletId,
+          name: (wallets || []).find((w) => w.id === walletId)?.name || "Account",
+          amount: 0,
+          percent: 0,
+          mode: "amount",
+        };
+      const fromEntry = getEntry(transferFrom.id);
+      const toEntry = getEntry(transferToId);
+      const fromAmount = Math.max(0, (fromEntry.amount || 0) - amount);
+      const toAmount = (toEntry.amount || 0) + amount;
+      const toPercent = income > 0 ? (toAmount / income) * 100 : 0;
+      const fromPercent = income > 0 ? (fromAmount / income) * 100 : 0;
+      const nextFunding = existingFunding
+        .filter((f) => f.walletId !== transferFrom.id && f.walletId !== transferToId)
+        .concat([
+          {
+            ...fromEntry,
+            amount: fromAmount,
+            percent: Math.round(fromPercent * 100) / 100,
+            mode: "amount",
+          },
+          {
+            ...toEntry,
+            amount: toAmount,
+            percent: Math.round(toPercent * 100) / 100,
+            mode: "amount",
+          },
+        ]);
+      await updateMonthlySummary(uid, selectedMonth, { walletFunding: nextFunding });
+      setShowTransferModal(false);
+      setTransferFrom(null);
+      setTransferToId(null);
+      setTransferAmount("");
+      await loadWallets();
+      Alert.alert("Success", `Transferred ${fmt(amount)} to ${toWallet.name}.`);
+    } catch (error) {
+      console.error("Failed to transfer:", error);
+      Alert.alert("Error", "Could not complete the transfer.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const assetWallets = wallets.filter((w) => w.type === "asset");
   const creditWallets = wallets.filter((w) => w.type === "credit");
 
@@ -161,7 +256,7 @@ const WalletsScreen = ({ navigation, route }) => {
   };
 
   // Per-wallet month stats:
-  // asset: funded (from monthly summary walletFunding) − spent (from month spending)
+  // asset: funded (from monthly summary walletFunding) − spent (from month spending + investments)
   // Only records explicitly tied to a wallet count toward that wallet's "Used";
   // legacy records without a walletId are not attributed to any account.
   const walletStats = (() => {
@@ -175,6 +270,11 @@ const WalletsScreen = ({ navigation, route }) => {
       if (!s.walletId || !walletIds.has(s.walletId)) return;
       spentByWallet[s.walletId] =
         (spentByWallet[s.walletId] || 0) + (s.totalSpending || s.amount || 0);
+    });
+    (monthInvestments || []).forEach((inv) => {
+      if (!inv.walletId || !walletIds.has(inv.walletId)) return;
+      spentByWallet[inv.walletId] =
+        (spentByWallet[inv.walletId] || 0) + (inv.totalInvestment || inv.amount || 0);
     });
     const stats = {};
     assetWallets.forEach((w) => {
@@ -213,23 +313,37 @@ const WalletsScreen = ({ navigation, route }) => {
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
             Your money across cash, mobile money, cards, and credit.
           </Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-            Showing {selectedMonth}
-          </Text>
 
           {/* Asset wallets */}
           {assetWallets.map((w) => {
             const stats = walletStats[w.id] || { total: 0, used: 0, balance: 0 };
             const pct = stats.total > 0 ? (stats.used / stats.total) * 100 : 0;
+            const iconName =
+              w.name === "Mobile Money"
+                ? "phone-portrait-outline"
+                : w.name === "Cash"
+                  ? "cash-outline"
+                  : "card-outline";
             return (
               <View key={w.id} style={[styles.card, { backgroundColor: theme.colors.card }]}>
                 <View style={styles.cardHeader}>
-                  <Ionicons name="cash-outline" size={22} color={theme.colors.tabBarActive} />
+                  <Ionicons name={iconName} size={22} color={theme.colors.tabBarActive} />
                   <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
                     {w.name}
                   </Text>
-                  <TouchableOpacity onPress={() => handleDelete(w)}>
-                    <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                  <TouchableOpacity
+                    ref={(ref) => {
+                      if (ref && w.id) walletButtonRefs[w.id] = ref;
+                    }}
+                    onPress={() => {
+                      walletButtonRefs[w.id]?.measureInWindow((x, y) => {
+                        setMenuPositionY(y);
+                        setMenuWalletId(w.id);
+                      });
+                    }}
+                    style={{ padding: 6 }}
+                  >
+                    <Ionicons name="ellipsis-vertical" size={18} color={theme.colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
                 <View style={styles.progressTrack}>
@@ -278,8 +392,19 @@ const WalletsScreen = ({ navigation, route }) => {
                   <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
                     {w.name}
                   </Text>
-                  <TouchableOpacity onPress={() => handleDelete(w)}>
-                    <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                  <TouchableOpacity
+                    ref={(ref) => {
+                      if (ref && w.id) walletButtonRefs[w.id] = ref;
+                    }}
+                    onPress={() => {
+                      walletButtonRefs[w.id]?.measureInWindow((x, y) => {
+                        setMenuPositionY(y);
+                        setMenuWalletId(w.id);
+                      });
+                    }}
+                    style={{ padding: 6 }}
+                  >
+                    <Ionicons name="ellipsis-vertical" size={18} color={theme.colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
                 <View style={styles.progressTrack}>
@@ -441,6 +566,139 @@ const WalletsScreen = ({ navigation, route }) => {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Wallet Action Menu (overlay dropdown like the record menu) */}
+      <Modal
+        visible={menuWalletId !== null}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setMenuWalletId(null)}
+      >
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)" }}
+          activeOpacity={1}
+          onPress={() => setMenuWalletId(null)}
+        >
+          <View
+            style={[
+              styles.walletMenu,
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                top: menuPositionY,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.walletMenuItem}
+              onPress={() => {
+                const w = (wallets || []).find((x) => x.id === menuWalletId);
+                setMenuWalletId(null);
+                if (w) openTransfer(w);
+              }}
+            >
+              <Ionicons name="swap-horizontal-outline" size={20} color={theme.colors.tabBarActive} />
+              <Text style={[styles.walletMenuText, { color: theme.colors.text }]}>Transfer</Text>
+            </TouchableOpacity>
+            <View style={{ height: 1, backgroundColor: theme.colors.border }} />
+            <TouchableOpacity
+              style={styles.walletMenuItem}
+              onPress={() => {
+                const w = (wallets || []).find((x) => x.id === menuWalletId);
+                setMenuWalletId(null);
+                if (w) handleDelete(w);
+              }}
+            >
+              <Ionicons name="trash-outline" size={20} color="#ef4444" />
+              <Text style={[styles.walletMenuText, { color: "#ef4444" }]}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Transfer Modal */}
+      <Modal
+        visible={showTransferModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTransferModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+                Transfer from {transferFrom?.name || "Account"}
+              </Text>
+              <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+                To *
+              </Text>
+              <View style={{ marginBottom: 16 }}>
+                {(wallets || [])
+                  .filter((w) => w.id !== transferFrom?.id)
+                  .map((w) => {
+                    const isSelected = w.id === transferToId;
+                    return (
+                      <TouchableOpacity
+                        key={w.id}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          paddingVertical: 12,
+                          paddingHorizontal: 12,
+                          borderRadius: 8,
+                          marginBottom: 8,
+                          backgroundColor: isSelected
+                            ? theme.colors.tabBarActive + "15"
+                            : theme.colors.background,
+                        }}
+                        onPress={() => setTransferToId(w.id)}
+                      >
+                        <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: "600" }}>
+                          {w.name}
+                        </Text>
+                        {isSelected && (
+                          <Ionicons name="checkmark-circle" size={20} color={theme.colors.tabBarActive} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+              </View>
+              <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Amount *</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, color: theme.colors.text }]}
+                placeholder="0.00"
+                placeholderTextColor={theme.colors.textSecondary}
+                keyboardType="numeric"
+                value={transferAmount}
+                onChangeText={setTransferAmount}
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: theme.colors.border }]}
+                  onPress={() => setShowTransferModal(false)}
+                >
+                  <Text style={{ color: theme.colors.text, fontWeight: "600" }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: saving ? theme.colors.textSecondary : theme.colors.tabBarActive }]}
+                  onPress={handleTransfer}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <IOSSpinner size={18} color="#fff" />
+                  ) : (
+                    <Text style={{ color: "#fff", fontWeight: "600" }}>Transfer</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 };
@@ -471,6 +729,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
+    position: "relative",
   },
   cardHeader: {
     flexDirection: "row",
@@ -570,6 +829,30 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
+  },
+  walletMenu: {
+    position: "absolute",
+    right: 16,
+    minWidth: 160,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  walletMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  walletMenuText: {
+    fontSize: 15,
+    fontWeight: "500",
   },
 });
 

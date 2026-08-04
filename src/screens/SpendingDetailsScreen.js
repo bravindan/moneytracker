@@ -70,11 +70,12 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   // asset: funded (from monthly summary walletFunding) − spent (from all month spending)
   // credit: remaining
   const walletBalances = (() => {
+    const walletList = wallets || [];
     const fundingMap = {};
     (monthlySummary?.walletFunding || []).forEach((f) => {
       fundingMap[f.walletId] = f.amount || 0;
     });
-    const walletIds = new Set(wallets.map((w) => w.id));
+    const walletIds = new Set(walletList.map((w) => w.id));
     const spentByWallet = {};
     (allMonthSpending || []).forEach((s) => {
       if (!s.walletId || !walletIds.has(s.walletId)) return;
@@ -82,7 +83,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
         (spentByWallet[s.walletId] || 0) + (s.totalSpending || s.amount || 0);
     });
     const balances = {};
-    (wallets || []).forEach((w) => {
+    walletList.forEach((w) => {
       if (w.type === "credit") {
         balances[w.id] = w.remaining || 0;
       } else {
@@ -233,8 +234,6 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
     setDate(new Date());
     setSelectedWalletId(null);
     setShowAddModal(true);
-    // Always ask which wallet to use.
-    setTimeout(() => setShowWalletPicker(true), 300);
   };
 
   const clearSpendingForm = () => {
@@ -1128,7 +1127,7 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
               </TouchableOpacity>
             </View>
             <ScrollView style={{ maxHeight: 320 }} bounces={false}>
-              {wallets.map((wallet) => {
+              {(wallets || []).map((wallet) => {
                 const isSelected = wallet.id === selectedWalletId;
                 return (
                   <TouchableOpacity
