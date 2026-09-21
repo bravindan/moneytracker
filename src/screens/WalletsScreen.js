@@ -26,6 +26,7 @@ import {
   updateMonthlySummary,
   getSpending,
   getInvestments,
+  getUnassignedRecords,
   getUserProfile,
 } from "../services/firestoreService";
 import { useFocusEffect } from "@react-navigation/native";
@@ -57,24 +58,28 @@ const WalletsScreen = ({ navigation, route }) => {
   const [newName, setNewName] = useState("");
   const [newLimit, setNewLimit] = useState("");
   const [repayAmount, setRepayAmount] = useState("");
+  const [unassignedCount, setUnassignedCount] = useState(0);
   const [saving, setSaving] = useState(false);
 
   const loadWallets = useCallback(async () => {
     if (!uid) return;
     try {
       await ensureDefaultWallets(uid);
-      const [all, prof, summary, spending, investments] = await Promise.all([
-        getWallets(uid),
-        getUserProfile(uid),
-        getMonthlySummary(uid, selectedMonth),
-        getSpending(uid, selectedMonth),
-        getInvestments(uid, selectedMonth),
-      ]);
+      const [all, prof, summary, spending, investments, unassigned] =
+        await Promise.all([
+          getWallets(uid),
+          getUserProfile(uid),
+          getMonthlySummary(uid, selectedMonth),
+          getSpending(uid, selectedMonth),
+          getInvestments(uid, selectedMonth),
+          getUnassignedRecords(uid),
+        ]);
       setWallets(all);
       setProfile(prof);
       setMonthlySummary(summary);
       setMonthSpending(spending || []);
       setMonthInvestments(investments || []);
+      setUnassignedCount((unassigned || []).length);
     } catch (error) {
       console.error("Failed to load wallets:", error);
     } finally {
@@ -313,6 +318,41 @@ const WalletsScreen = ({ navigation, route }) => {
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
             Your money across cash, mobile money, cards, and credit.
           </Text>
+
+          {unassignedCount > 0 && (
+            <TouchableOpacity
+              style={[
+                styles.card,
+                {
+                  backgroundColor: theme.colors.card,
+                  borderWidth: 1,
+                  borderColor: theme.colors.tabBarActive,
+                },
+              ]}
+              onPress={() => navigation.navigate("UnassignedRecords")}
+            >
+              <View style={styles.cardHeader}>
+                <Ionicons
+                  name="link-outline"
+                  size={22}
+                  color={theme.colors.tabBarActive}
+                />
+                <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
+                  {unassignedCount} record{unassignedCount === 1 ? "" : "s"} without an account
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={theme.colors.textSecondary}
+                />
+              </View>
+              <Text
+                style={{ color: theme.colors.textSecondary, fontSize: 13, lineHeight: 18 }}
+              >
+                They aren't reducing any balance yet. Assign them to an account.
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Asset wallets */}
           {assetWallets.map((w) => {

@@ -39,6 +39,7 @@ import InvestmentsDetailScreen from "./src/screens/InvestmentsDetailScreen";
 import SpendingDetailsScreen from "./src/screens/SpendingDetailsScreen";
 import ReportsScreen from "./src/screens/ReportsScreen";
 import WalletsScreen from "./src/screens/WalletsScreen";
+import UnassignedRecordsScreen from "./src/screens/UnassignedRecordsScreen";
 import { GlobalAlertComponent } from "./src/components/GlobalAlert";
 import { TabView, SceneMap, TabBar } from "react-native-tab-view";
 import { useNavigation } from "@react-navigation/native";
@@ -73,6 +74,10 @@ function AppStack() {
       <Stack.Screen name="SpendingDetails" component={SpendingDetailsScreen} />
       <Stack.Screen name="Reports" component={ReportsScreen} />
       <Stack.Screen name="Wallets" component={WalletsScreen} />
+      <Stack.Screen
+        name="UnassignedRecords"
+        component={UnassignedRecordsScreen}
+      />
     </Stack.Navigator>
   );
 }
