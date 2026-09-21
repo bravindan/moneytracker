@@ -27,6 +27,7 @@ import {
   getWallets,
   ensureDefaultWallets,
   useCreditAmount,
+  getInvestments,
 } from "../services/firestoreService";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Print from "expo-print";
@@ -78,6 +79,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   const [saving, setSaving] = useState(false);
   const [monthlyData, setMonthlyData] = useState(null);
   const [allSpending, setAllSpending] = useState([]);
+  const [allInvestments, setAllInvestments] = useState([]);
 
   // Spending modal state
   const [showSpendingModal, setShowSpendingModal] = useState(false);
@@ -109,6 +111,10 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
       const spendingData = await getSpending(user.uid, selectedMonth);
       setAllSpending(spendingData);
 
+      // Get all investment records (they also draw from wallet balances)
+      const investmentsData = await getInvestments(user.uid, selectedMonth);
+      setAllInvestments(investmentsData || []);
+
       // Calculate percentages based on total allocated amount from monthly summary
       const expensesList = expensesData.map((expense) => ({
         ...expense,
@@ -124,6 +130,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
       setExpenses([]);
       setMonthlyData(null);
       setAllSpending([]);
+      setAllInvestments([]);
     }
   }, [user.uid, selectedMonth]);
 
@@ -141,8 +148,12 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   const fetchFreshSpending = useCallback(async () => {
     try {
       if (!user?.uid) return;
-      const spendingData = await getSpending(user.uid, selectedMonth);
+      const [spendingData, investmentsData] = await Promise.all([
+        getSpending(user.uid, selectedMonth),
+        getInvestments(user.uid, selectedMonth),
+      ]);
       setAllSpending(spendingData);
+      setAllInvestments(investmentsData || []);
     } catch (error) {
       console.error("Failed to update spending data on focus:", error);
     }
@@ -175,7 +186,7 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
   const totalRemaining = totalAllocated - totalSpent;
 
   // Available balance per wallet for the selected month:
-  // asset: funded (from monthly summary walletFunding) − spent (from all month spending)
+  // asset: funded (from monthly summary walletFunding) − spent (from all month spending + investments)
   // credit: remaining
   const walletBalances = (() => {
     const fundingMap = {};
@@ -188,6 +199,11 @@ const ExpensesDetailScreen = ({ navigation, route }) => {
       if (!s.walletId || !walletIds.has(s.walletId)) return;
       spentByWallet[s.walletId] =
         (spentByWallet[s.walletId] || 0) + (s.totalSpending || s.amount || 0);
+    });
+    (allInvestments || []).forEach((inv) => {
+      if (!inv.walletId || !walletIds.has(inv.walletId)) return;
+      spentByWallet[inv.walletId] =
+        (spentByWallet[inv.walletId] || 0) + (inv.totalInvestment || inv.amount || 0);
     });
     const balances = {};
     (wallets || []).forEach((w) => {
