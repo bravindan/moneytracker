@@ -1,2 +1,2 @@
-# Taste
-See [taste/taste.md](taste/taste.md)
+# Taste / Preferences
+See [taste-/-preferences/taste.md](taste-/-preferences/taste.md)

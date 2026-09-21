@@ -25,6 +25,7 @@ import {
   ensureDefaultWallets,
   useCreditAmount,
   getMonthlySummary,
+  getInvestments,
 } from "../services/firestoreService";
 import {
   Alert,
@@ -50,14 +51,16 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
     (async () => {
       try {
         await ensureDefaultWallets(user.uid);
-        const [all, summary, monthSpending] = await Promise.all([
+        const [all, summary, monthSpending, monthInvestments] = await Promise.all([
           getWallets(user.uid),
           selectedMonth ? getMonthlySummary(user.uid, selectedMonth) : null,
           selectedMonth ? getSpending(user.uid, selectedMonth) : [],
+          selectedMonth ? getInvestments(user.uid, selectedMonth) : [],
         ]);
         setWallets(all);
         setMonthlySummary(summary);
         setAllMonthSpending(monthSpending || []);
+        setMonthInvestments(monthInvestments || []);
         // No default wallet — force an explicit "Paid From" choice.
         setSelectedWalletId(null);
       } catch (error) {
@@ -66,8 +69,16 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
     })();
   }, [user?.uid, selectedMonth]);
 
+  // Wallet selection ("Paid from")
+  const [wallets, setWallets] = useState([]);
+  const [selectedWalletId, setSelectedWalletId] = useState(null);
+  const [showWalletPicker, setShowWalletPicker] = useState(false);
+  const [monthlySummary, setMonthlySummary] = useState(null);
+  const [allMonthSpending, setAllMonthSpending] = useState([]);
+  const [monthInvestments, setMonthInvestments] = useState([]);
+
   // Available balance per wallet for the selected month:
-  // asset: funded (from monthly summary walletFunding) − spent (from all month spending)
+  // asset: funded (from monthly summary walletFunding) − spent (from all month spending + investments)
   // credit: remaining
   const walletBalances = (() => {
     const walletList = wallets || [];
@@ -81,6 +92,11 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
       if (!s.walletId || !walletIds.has(s.walletId)) return;
       spentByWallet[s.walletId] =
         (spentByWallet[s.walletId] || 0) + (s.totalSpending || s.amount || 0);
+    });
+    (monthInvestments || []).forEach((inv) => {
+      if (!inv.walletId || !walletIds.has(inv.walletId)) return;
+      spentByWallet[inv.walletId] =
+        (spentByWallet[inv.walletId] || 0) + (inv.totalInvestment || inv.amount || 0);
     });
     const balances = {};
     walletList.forEach((w) => {
@@ -117,12 +133,6 @@ const SpendingDetailsScreen = ({ route, navigation }) => {
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerMonthDate, setPickerMonthDate] = useState(new Date());
-  // Wallet selection ("Paid from")
-  const [wallets, setWallets] = useState([]);
-  const [selectedWalletId, setSelectedWalletId] = useState(null);
-  const [showWalletPicker, setShowWalletPicker] = useState(false);
-  const [monthlySummary, setMonthlySummary] = useState(null);
-  const [allMonthSpending, setAllMonthSpending] = useState([]);
 
   // Calculate the first day of the selected month for date validation
   const getFirstDayOfMonth = () => {

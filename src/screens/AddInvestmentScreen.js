@@ -89,7 +89,7 @@ const AddInvestmentScreen = ({ navigation, route }) => {
   const [pendingBalance, setPendingBalance] = useState(0);
 
   // Available balance per wallet for the selected month:
-  // asset: funded (from monthly summary walletFunding) − spent (from month spending)
+  // asset: funded (from monthly summary walletFunding) − spent (from month spending + investments)
   // credit: remaining
   const walletBalances = (() => {
     const walletList = wallets || [];
@@ -103,6 +103,12 @@ const AddInvestmentScreen = ({ navigation, route }) => {
       if (!s.walletId || !walletIds.has(s.walletId)) return;
       spentByWallet[s.walletId] =
         (spentByWallet[s.walletId] || 0) + (s.totalSpending || s.amount || 0);
+    });
+    (investments || []).forEach((inv) => {
+      if (inv.id === editingId) return;
+      if (!inv.walletId || !walletIds.has(inv.walletId)) return;
+      spentByWallet[inv.walletId] =
+        (spentByWallet[inv.walletId] || 0) + (inv.totalInvestment || inv.amount || 0);
     });
     const balances = {};
     walletList.forEach((w) => {
