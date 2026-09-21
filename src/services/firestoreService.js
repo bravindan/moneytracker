@@ -486,9 +486,116 @@ export const deleteMonthlyRecord = async (uid, month) => {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_WALLETS = [
-  { name: "Cash", type: "asset", isDefault: true },
-  { name: "Mobile Money", type: "asset", isDefault: true },
+  { id: "cash", name: "Cash", type: "asset", isDefault: true },
+  { id: "mobile-money", name: "Mobile Money", type: "asset", isDefault: true },
 ];
+
+const normalizeWalletName = (name) => (name || "").trim().toLowerCase();
+
+const toMillis = (value) =>
+  value?.toMillis ? value.toMillis() : new Date(value || 0).getTime() || 0;
+
+/**
+ * Merge asset wallets that share a name. Older versions of
+ * ensureDefaultWallets used generated ids, so two concurrent calls (several
+ * screens call it on load) could each seed a "Cash" / "Mobile Money" document.
+ * Funding entries, spending and investments pointing at a duplicate are
+ * re-pointed at the surviving wallet before the duplicates are deleted.
+ * @param {string} uid
+ * @param {object[]} [knownWallets] - wallets the caller already fetched
+ * @returns {Promise<boolean>} whether anything was merged
+ */
+export const reconcileDuplicateWallets = async (uid, knownWallets) => {
+  const wallets = knownWallets || (await getWallets(uid));
+  const groups = new Map();
+  wallets
+    .filter((w) => (w.type || "asset") === "asset")
+    .forEach((w) => {
+      const key = normalizeWalletName(w.name);
+      if (!key) return;
+      groups.set(key, [...(groups.get(key) || []), w]);
+    });
+
+  const duplicates = [...groups.values()].filter((group) => group.length > 1);
+  if (!duplicates.length) return false;
+
+  const [summariesSnap, spendingSnap, investmentsSnap] = await Promise.all([
+    getDocs(monthlySummariesCol(uid)),
+    getDocs(spendingCol(uid)),
+    getDocs(investmentsCol(uid)),
+  ]);
+
+  const fundingCount = {};
+  const recordCount = {};
+  summariesSnap.docs.forEach((d) => {
+    (d.data().walletFunding || []).forEach((f) => {
+      if (f.walletId) {
+        fundingCount[f.walletId] = (fundingCount[f.walletId] || 0) + 1;
+      }
+    });
+  });
+  [spendingSnap, investmentsSnap].forEach((snap) => {
+    snap.docs.forEach((d) => {
+      const { walletId } = d.data();
+      if (walletId) recordCount[walletId] = (recordCount[walletId] || 0) + 1;
+    });
+  });
+
+  // Keep the wallet that holds the month funding, then the one with the most
+  // records, then the oldest — so the surviving account keeps the real balance.
+  const canonicalFor = {};
+  const duplicateIds = [];
+  duplicates.forEach((group) => {
+    const ranked = [...group].sort((a, b) => {
+      const funding = (fundingCount[b.id] || 0) - (fundingCount[a.id] || 0);
+      if (funding) return funding;
+      const records = (recordCount[b.id] || 0) - (recordCount[a.id] || 0);
+      if (records) return records;
+      return toMillis(a.createdAt) - toMillis(b.createdAt);
+    });
+    ranked.slice(1).forEach((w) => {
+      canonicalFor[w.id] = ranked[0];
+      duplicateIds.push(w.id);
+    });
+  });
+
+  const summaryWrites = [];
+  summariesSnap.docs.forEach((d) => {
+    const funding = d.data().walletFunding;
+    if (!Array.isArray(funding) || !funding.length) return;
+    let changed = false;
+    const merged = [];
+    const byKey = {};
+    funding.forEach((f) => {
+      const target = f.walletId ? canonicalFor[f.walletId] : null;
+      const walletId = target ? target.id : f.walletId;
+      const name = target ? target.name : f.name;
+      if (walletId !== f.walletId) changed = true;
+      const key = walletId || `custom:${normalizeWalletName(name)}`;
+      if (byKey[key]) {
+        byKey[key].amount = (byKey[key].amount || 0) + (f.amount || 0);
+        byKey[key].percent = (byKey[key].percent || 0) + (f.percent || 0);
+        changed = true;
+      } else {
+        byKey[key] = { ...f, walletId, name };
+        merged.push(byKey[key]);
+      }
+    });
+    if (changed) summaryWrites.push(updateDoc(d.ref, { walletFunding: merged }));
+  });
+
+  const recordWrites = [];
+  [spendingSnap, investmentsSnap].forEach((snap) => {
+    snap.docs.forEach((d) => {
+      const target = canonicalFor[d.data().walletId];
+      if (target) recordWrites.push(updateDoc(d.ref, { walletId: target.id }));
+    });
+  });
+
+  await Promise.all([...summaryWrites, ...recordWrites]);
+  await Promise.all(duplicateIds.map((id) => deleteDoc(doc(walletsCol(uid), id))));
+  return true;
+};
 
 /**
  * Create the default asset wallets (Cash / Mobile Money) if they
@@ -498,12 +605,27 @@ const DEFAULT_WALLETS = [
  */
 export const ensureDefaultWallets = async (uid) => {
   const snap = await getDocs(walletsCol(uid));
-  const existing = new Set(snap.docs.map((d) => d.data().name));
-  const missing = DEFAULT_WALLETS.filter((w) => !existing.has(w.name));
+  const existing = new Set(
+    snap.docs.map((d) => normalizeWalletName(d.data().name)),
+  );
+  const existingIds = new Set(snap.docs.map((d) => d.id));
+  const missing = DEFAULT_WALLETS.filter(
+    (w) => !existing.has(normalizeWalletName(w.name)),
+  );
+  // Fixed document ids: concurrent calls can no longer create a second "Cash".
   await Promise.all(
-    missing.map((w) =>
-      addDoc(walletsCol(uid), { ...w, createdAt: serverTimestamp() }),
+    missing.map(({ id, ...w }) =>
+      existingIds.has(id)
+        ? null
+        : setDoc(doc(walletsCol(uid), id), {
+            ...w,
+            createdAt: serverTimestamp(),
+          }),
     ),
+  );
+  await reconcileDuplicateWallets(
+    uid,
+    snap.docs.map((d) => ({ id: d.id, ...d.data() })),
   );
 };
 
@@ -600,6 +722,59 @@ export const repayCredit = async (uid, walletId, amount) => {
     used: newUsed,
     remaining: newRemaining,
   });
+};
+
+/**
+ * Spending and investment records that aren't tied to any account, across
+ * all months — typically recorded before accounts existed.
+ * @param {string} uid
+ * @returns {Promise<object[]>}
+ */
+export const getUnassignedRecords = async (uid) => {
+  const [spendingSnap, investmentsSnap] = await Promise.all([
+    getDocs(spendingCol(uid)),
+    getDocs(investmentsCol(uid)),
+  ]);
+  return [
+    ...spendingSnap.docs
+      .filter((d) => !d.data().walletId)
+      .map((d) => ({ id: d.id, recordType: "spending", ...d.data() })),
+    ...investmentsSnap.docs
+      .filter((d) => !d.data().walletId)
+      .map((d) => ({ id: d.id, recordType: "investment", ...d.data() })),
+  ].sort(
+    (a, b) => toMillis(b.date || b.createdAt) - toMillis(a.date || a.createdAt),
+  );
+};
+
+/**
+ * Point unassigned records at an account so they count toward its balance.
+ * Legacy records without a month get one derived from their date, otherwise
+ * the month views would never pick them up.
+ * @param {string} uid
+ * @param {object[]} records - rows from getUnassignedRecords
+ * @param {{ id: string, type: string }} wallet
+ * @returns {Promise<void>}
+ */
+export const assignWalletToRecords = async (uid, records, wallet) => {
+  await Promise.all(
+    records.map((record) => {
+      const col =
+        record.recordType === "investment"
+          ? investmentsCol(uid)
+          : spendingCol(uid);
+      const updates = { walletId: wallet.id, walletType: wallet.type };
+      if (!record.month) updates.month = resolveWriteMonth(record);
+      return updateDoc(doc(col, record.id), updates);
+    }),
+  );
+  if (wallet.type === "credit") {
+    const total = records.reduce(
+      (sum, r) => sum + (r.totalSpending ?? r.totalInvestment ?? r.amount ?? 0),
+      0,
+    );
+    if (total > 0) await useCreditAmount(uid, wallet.id, total);
+  }
 };
 
 /**
